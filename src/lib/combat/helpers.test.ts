@@ -237,7 +237,10 @@ describe('A18-tail · canTogglePreparedFor (the shared toggle seam — combat + 
 
 describe('D9 · weaponBonus (per-weapon magic +X)', () => {
 	it('folds a literal +1 into both attack and damage with a provenance note', () => {
-		const w = weaponBonus(['flat_bonus:attack+1', 'flat_bonus:damage+1']);
+		const w = weaponBonus(new Map<string, string>(), [
+			'flat_bonus:attack+1',
+			'flat_bonus:damage+1',
+		]);
 		expect(w).toMatchObject({ attack: 1, damage: 1 });
 		expect(w.notes?.map((n) => ('token' in n ? n.token : n.text))).toEqual([
 			'+1 attack',
@@ -246,11 +249,11 @@ describe('D9 · weaponBonus (per-weapon magic +X)', () => {
 	});
 
 	it('a plain weapon (no effect tokens) yields a zero bonus and no note', () => {
-		expect(weaponBonus([])).toEqual({ attack: 0, damage: 0 });
+		expect(weaponBonus(new Map<string, string>(), [])).toEqual({ attack: 0, damage: 0 });
 	});
 
 	it('an UNtyped dice bonus degrades to a visible note, not a silent fold', () => {
-		const w = weaponBonus(['flat_bonus:damage+1d6']); // no type slot → nowhere to put the part
+		const w = weaponBonus(new Map<string, string>(), ['flat_bonus:damage+1d6']); // no type slot → nowhere to put the part
 		expect(w.damage).toBe(0);
 		expect(w.extraParts).toBeUndefined();
 		// the token travels whole, so the tag it becomes is worded where the translator is
@@ -303,19 +306,24 @@ describe('D9 · weaponBonus (per-weapon magic +X)', () => {
 	});
 
 	it('D9-tail · a TYPED dice bonus (flaming) becomes its own extra damage part', () => {
-		const w = weaponBonus(['flat_bonus:damage:fire+1d6']);
+		const w = weaponBonus(new Map<string, string>(), ['flat_bonus:damage:fire+1d6']);
 		expect(w.damage).toBe(0); // not folded into the weapon's base type
 		expect(w.extraParts).toEqual([{ pool: { 6: 1 }, mod: 0, type: 'fire' }]);
 	});
 
 	it('D9-tail · a TYPED flat bonus becomes its own extra part (not folded into base damage)', () => {
-		const w = weaponBonus(['flat_bonus:damage:radiant+2']);
+		const w = weaponBonus(new Map<string, string>(), ['flat_bonus:damage:radiant+2']);
 		expect(w.damage).toBe(0);
 		expect(w.extraParts).toEqual([{ pool: {}, mod: 2, type: 'radiant' }]);
 	});
 
 	it('ignores tokens that are not attack/damage flat bonuses', () => {
-		expect(weaponBonus(['damage_sensitivity:resist:fire', 'grant_resource:ki'])).toEqual({
+		expect(
+			weaponBonus(new Map<string, string>(), [
+				'damage_sensitivity:resist:fire',
+				'grant_resource:ki',
+			]),
+		).toEqual({
 			attack: 0,
 			damage: 0,
 		});

@@ -10,7 +10,7 @@ import { t, translator } from '$lib/i18n';
 import { attackRollName } from '$lib/combat/attacks';
 import type { Character } from '$lib/character/schema';
 import type { CharacterSheet } from '$lib/character/derive';
-import { DIE_ROLE, rollPool, totalOf, type RolledDie } from '$lib/rules/dice';
+import { DIE_ROLE, rollPool, totalOf, type BonusDie, type RolledDie } from '$lib/rules/dice';
 import { toastRoll } from '$lib/dice/roll-toast';
 import {
 	wantsTray,
@@ -249,13 +249,21 @@ export class SheetRolls {
 		const scopes = new Set(at.scopes);
 		const fx = this.effectsFor('attack', scopes);
 		const dmgFx = this.effectsFor('damage', scopes);
+		// §W: weapon-mastery dice fold onto the PRIMARY damage part only — RAW adds them to the
+		// weapon's base damage, never to a second damage type's dice (same seam as the ability mod).
+		const masteryDice = (at as Attack & { masteryDice?: BonusDie[] }).masteryDice ?? [];
 		// Damage effects (Bless-style flat/dice, reroll/min_die) fold onto the PRIMARY part only — RAW
 		// adds them to the weapon's base damage, not to a second damage type's dice.
 		const parts: DamagePartSpec[] = at.damageParts.map((p, i) => ({
 			dice: p.pool,
 			mod: p.mod + (i === 0 ? dmgFx.flat : 0),
 			type: p.type,
-			...(i === 0 ? { bonusDice: dmgFx.bonusDice, mods: dieModsOf(dmgFx) } : {}),
+			...(i === 0
+				? {
+						bonusDice: [...(dmgFx.bonusDice ?? []), ...masteryDice],
+						mods: dieModsOf(dmgFx),
+					}
+				: {}),
 		}));
 		// asked AFTER the effects fold in, so a flat damage effect on a damage-less weapon still counts
 		return { fx, parts, hasDmg: dealsDamage(parts) };

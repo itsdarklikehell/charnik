@@ -19,6 +19,19 @@ import { effectTag } from './effects-view';
 import { localizedName } from '$lib/content/detail';
 import { formatNote, type Note } from '$lib/rules/pipeline';
 import type { Translate } from '$lib/i18n';
+import type { BonusDie } from '$lib/rules/dice';
+
+/** The 2024 SRD weapon-mastery dice — one entry per mastery property the SRD defines. A weapon
+ *  whose `tags` cell carries `mastery:<key>` adds this die to the wielder's damage when the attack
+ *  hits, IF the wielder has Weapon Mastery for that weapon's mastery properties (gated where the
+ *  attack row is built — `computeAttacks` — which has the character's granted proficiencies). */
+const MASTERY_DICE: Readonly<Record<string, { count: number; sides: number }>> = {
+	nick: { count: 1, sides: 4 },
+	sap: { count: 1, sides: 4 },
+	slow: { count: 1, sides: 4 },
+	push: { count: 1, sides: 4 },
+	vex: { count: 1, sides: 6 },
+};
 
 /** One typed slice of a weapon's damage: its dice pool, flat mod, and damage type. A plain weapon is
  *  one part ("1d8 slashing"); a multi-type weapon is several ("1d6 slashing" + "1d4 radiant"). */
@@ -90,6 +103,11 @@ export interface Attack {
 	/** §A/§B the weapon's tag NAMES, which the roll path matches a scoped effect against — Archery
 	 *  (attack:ranged) and GWF (min_die:damage:two_handed,melee) read these. */
 	scopes: string[];
+	/** §W: weapon-mastery dice the wielder can use with this weapon — folded from the weapon's
+	 *  `mastery:<key>` tags against the character's granted Weapon Mastery properties (computed in
+	 *  `computeAttacks`, where the granted proficiencies are known). The roll path folds these onto
+	 *  the primary damage part. Omitted when the wielder has none of the weapon's mastery properties. */
+	masteryDice?: BonusDie[];
 	/** D9 provenance — a magic weapon's own bonus folded into THIS attack ("+1 attack & damage"),
 	 *  or a visible degrade note for a bonus v1 can't fold yet (dice / expression). Read through
 	 *  `attackNotes`. Omitted when the row has nothing to explain. */
@@ -192,13 +210,22 @@ export function formatDamageParts(parts: DamagePart[], translate?: Translate): s
 /** D9: fold a weapon's own `effects` tokens into a per-weapon attack/damage bonus. Only LITERAL
  *  `flat_bonus:attack` / `flat_bonus:damage` fold in v1; a dice / expression bonus becomes a visible
  *  note (it rides the roll path / needs a ctx — deferred, never silently dropped). Pure. */
-export function weaponBonus(tokens: string[]): {
+export function weaponBonus(
+	tags: ItemTags = new Map<string, string>(),
+	tokens: string[],
+): {
 	attack: number;
 	damage: number;
 	/** D9-tail: typed extra damage a magic weapon adds as its OWN part(s) — a flaming sword's
 	 *  `flat_bonus:damage:fire+1d6`. Rolled + shown separately, never given the ability mod. Omitted
 	 *  (undefined) when there are none, so a plain weapon's return stays `{attack, damage}`. */
 	extraParts?: DamagePart[];
+	/** §W: weapon-mastery dice folded onto the PRIMARY damage part only — a weapon whose
+	 *  `tags` cell carries `mastery:nick` (and the wielder has Weapon Mastery for that weapon's
+	 *  mastery properties) adds the mastery's dice to the attack's damage. One entry per mastery
+	 *  property; the dice ride the roll path with a `source` so the toast names the mastery that added
+	 *  them. Omitted when the weapon carries no recognised mastery tag. */
+	masteryDice?: BonusDie[];
 	notes?: AttackNote[];
 } {
 	let attack = 0;
@@ -234,10 +261,33 @@ export function weaponBonus(tokens: string[]): {
 			attackNote(ATTACK_NOTE.damageBonus, `${signed(damage)} damage`, { amount: signed(damage) }),
 		);
 	notes.push(...deferred);
+
+	// §W: weapon-mastery dice — the 2024 SRD tags weapons with `mastery:nick/sap/slow/push/vex`;
+	// a character with Weapon Mastery for that weapon's mastery properties folds the mastery's dice
+	// into THIS attack's damage at the roll. `masteryDice` is the flat list the roll path folds onto
+	// the primary part — it carries `source` (the mastery id) so the toast names it. The weapon's
+	// mastery tag must be one the wielder is granted (Weapon Mastery feature) — that gating lives at
+	// the roll site, where the character's granted masteries are known; here we return the dice for
+	// every mastery tag on the weapon and let the caller filter. A mastery tag with no known dice
+	// degrades to nothing (the caller already has the tag name from attackMeta).
+	const masteryDice: BonusDie[] = [];
+	for (const [name, value] of tags) {
+		if (name !== 'mastery' || !value) continue;
+		const die = MASTERY_DICE[value];
+		if (die)
+			masteryDice.push({
+				count: die.count,
+				sides: die.sides,
+				sign: 1,
+				source: `mastery:${value}`,
+			});
+	}
+
 	return {
 		attack,
 		damage,
 		...(extraParts.length ? { extraParts } : {}),
+		...(masteryDice.length ? { masteryDice } : {}),
 		...(notes.length ? { notes } : {}),
 	};
 }
@@ -353,7 +403,21 @@ export function computeAttacks(
 		// grant +1 to every attack — so it can't ride gatherEffects/global facts). v1 folds LITERAL
 		// flat_bonus:attack / flat_bonus:damage; a dice / expression bonus (a flaming +1d6) needs the
 		// roll path or a ctx and degrades to a VISIBLE note, never a silent drop.
-		const w = weaponBonus(row.data.effects);
+		const w = weaponBonus(item.tags, row.data.effects);
+		// §W: weapon-mastery dice — keep only the mastery properties the wielder is granted
+		// (Weapon Mastery feature carries `grant_proficiency:mastery:<property>` in its effects;
+		// the proficiency fact target is `mastery:<key>`). A weapon whose mastery tag the wielder
+		// lacks for that property drops that die — the weapon still carries the tag, but the die
+		// does not fold until the character picks that mastery property.
+		const grantedMasteries = new Set(
+			sheet.facts.proficiencies
+				.filter((p) => p.target.startsWith('mastery:'))
+				.map((p) => p.target.slice('mastery:'.length)),
+		);
+		const masteryDice =
+			w.masteryDice?.filter(
+				(d) => d.source && grantedMasteries.has(d.source.slice('mastery:'.length)),
+			) ?? [];
 		// §A: character-level weapon-category-scoped attack bonuses (Archery → ranged weapons) fold
 		// into THIS weapon's to-hit only when it carries the matching category tag.
 		// a tag NAME is an effect scope — one vocabulary, so `mastery:nick` scopes as `mastery`
@@ -406,6 +470,7 @@ export function computeAttacks(
 			damageParts,
 			meta: metaTags(item.tags),
 			scopes: [...scopeSet],
+			...(masteryDice.length ? { masteryDice } : {}),
 			...(notes.length ? { notes } : {}),
 		});
 	}
