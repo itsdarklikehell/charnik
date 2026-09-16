@@ -57,11 +57,22 @@ const ROLL_TARGETS = new Set<string>([
 // "martial" are only unambiguous next to the thing they are a category OF.
 const WEAPON_PREFIX = 'weapon.';
 
-/** The five 2024 SRD weapon-mastery properties. Weapons tagged `mastery:<key>` fold their dice
- *  through the attack path only when the wielder's Weapon Mastery feature grants that property
- *  (the feature row says `grant_proficiency:mastery:nick,sap,slow,push,vex`). The target vocab
- *  must include each so B13 sees a `mastery:nick` target as consumed, not silently dropped. */
-const MASTERY_PROPERTIES = ['nick', 'sap', 'slow', 'push', 'vex'] as const;
+/** All eight 2024 SRD weapon-mastery properties. Weapons tagged `mastery:<key>` fold through the
+ *  attack path only when the wielder's Weapon Mastery feature grants that property
+ *  (the feature row says `grant_proficiency:mastery:nick,sap,slow,push,vex,cleave,graze,topple`).
+ *  The target vocab must include each so B13 sees a `mastery:<key>` target as consumed, not silently
+ *  dropped. Five of the eight (nick/sap/slow/push/vex) are dice bonuses folded onto damage; the other
+ *  three (cleave/graze/topple) are action effects surfaced as attack notes by `weaponBonus`. */
+const MASTERY_PROPERTIES = [
+	'nick',
+	'sap',
+	'slow',
+	'push',
+	'vex',
+	'cleave',
+	'graze',
+	'topple',
+] as const;
 
 const PROFICIENCY_TARGETS = new Set<string>([
 	...ABILITIES,

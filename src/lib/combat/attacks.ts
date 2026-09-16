@@ -21,10 +21,12 @@ import { formatNote, type Note } from '$lib/rules/pipeline';
 import type { Translate } from '$lib/i18n';
 import type { BonusDie } from '$lib/rules/dice';
 
-/** The 2024 SRD weapon-mastery dice — one entry per mastery property the SRD defines. A weapon
- *  whose `tags` cell carries `mastery:<key>` adds this die to the wielder's damage when the attack
- *  hits, IF the wielder has Weapon Mastery for that weapon's mastery properties (gated where the
- *  attack row is built — `computeAttacks` — which has the character's granted proficiencies). */
+/** All eight 2024 SRD weapon-mastery properties. Five (nick/sap/slow/push/vex) are dice bonuses
+ *  folded onto the primary damage part when the attack hits; the other three (cleave/graze/topple)
+ *  are action effects — a second attack on a nearby foe, a miss→ability-mod damage, and a CON save
+ *  or prone — surfaced as attack notes by `weaponBonus` rather than folded as dice. A weapon whose
+ *  `tags` cell carries `mastery:<key>` lists the property; the wielder's granted masteries gate what
+ *  actually fires (gated at `computeAttacks`, where the granted proficiencies are known). */
 const MASTERY_DICE: Readonly<Record<string, { count: number; sides: number }>> = {
 	nick: { count: 1, sides: 4 },
 	sap: { count: 1, sides: 4 },
@@ -58,6 +60,7 @@ const ATTACK_NOTE = {
 	notProficient: 'combat.attacks.noteNotProficient',
 	noBaseWeapon: 'combat.attacks.noteNoBaseWeapon',
 	damageUnread: 'combat.attacks.noteDamageUnread',
+	masteryAction: 'combat.attacks.noteMasteryAction',
 } as const;
 
 /** One line of provenance under an attack row. A rule `Note` carries its catalog key beside the
@@ -262,15 +265,23 @@ export function weaponBonus(
 		);
 	notes.push(...deferred);
 
-	// §W: weapon-mastery dice — the 2024 SRD tags weapons with `mastery:nick/sap/slow/push/vex`;
-	// a character with Weapon Mastery for that weapon's mastery properties folds the mastery's dice
-	// into THIS attack's damage at the roll. `masteryDice` is the flat list the roll path folds onto
-	// the primary part — it carries `source` (the mastery id) so the toast names it. The weapon's
-	// mastery tag must be one the wielder is granted (Weapon Mastery feature) — that gating lives at
-	// the roll site, where the character's granted masteries are known; here we return the dice for
-	// every mastery tag on the weapon and let the caller filter. A mastery tag with no known dice
-	// degrades to nothing (the caller already has the tag name from attackMeta).
+	// §W: weapon-mastery properties — the 2024 SRD tags weapons with `mastery:<key>` for all eight
+	// properties; five of them (nick/sap/slow/push/vex) fold as dice onto the primary damage part when
+	// the attack hits, and three (cleave/graze/topple) are action effects surfaced as notes. A character
+	// with Weapon Mastery for that weapon's mastery properties sees the dice/notes; the gating lives at
+	// the roll site (`computeAttacks`), where the character's granted masteries are known. Here we return
+	// dice for every mastery tag that has a known die, and a note for every mastery tag that does not —
+	// the caller already has the tag name from attackMeta.
 	const masteryDice: BonusDie[] = [];
+	const masteryNotes: AttackNote[] = [];
+	const MASTERY_ACTION_NOTES: Record<string, string> = {
+		cleave:
+			'mastery cleave: make a second melee attack against a creature within 5ft of the first (once per turn, no ability mod on the second damage unless negative)',
+		graze:
+			'mastery graze: on a miss, deal damage equal to the ability modifier used to make the attack roll',
+		topple:
+			'mastery topple: force the target to make a CON save (DC 8 + ability mod + PB) or fall prone',
+	};
 	for (const [name, value] of tags) {
 		if (name !== 'mastery' || !value) continue;
 		const die = MASTERY_DICE[value];
@@ -281,7 +292,14 @@ export function weaponBonus(
 				sign: 1,
 				source: `mastery:${value}`,
 			});
+		else if (MASTERY_ACTION_NOTES[value])
+			masteryNotes.push(
+				attackNote('combat.attacks.noteMasteryAction', MASTERY_ACTION_NOTES[value], {
+					mastery: value,
+				}),
+			);
 	}
+	notes.push(...masteryNotes);
 
 	return {
 		attack,
