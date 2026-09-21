@@ -59,6 +59,14 @@ can build from source. Only official releases are signed (the updater's `.sig` f
 are added by CI via `src-tauri/tauri.release.conf.json`, which needs the private key); local unsigned
 builds simply don't auto-update.
 
+## Gource Visualization
+
+De ontwikkelhistorie van dit project in een film:
+
+<video src="https://raw.githubusercontent.com/itsdarklikehell/charnik/main/gource-720p.mp4" controls width="100%"></video>
+
+*De video wordt automatisch gegenereerd door de [Gource workflow](.github/workflows/gource.yml) bij elke push — rendered via [nbprojekt/gource-action@v1.3.0](https://github.com/marketplace/actions/gource-action) in 1080p. Het artifact is 30 dagen beschikbaar via Actions.*
+
 ## Licensing
 
 Charnik separates **code**, **bundled data**, and **user content** — see
