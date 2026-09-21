@@ -44,7 +44,7 @@ play-state action model lives in [`actions.md`](actions.md), and the threat mode
 | `dependency-graph.ts`                                                                    | The ONE resolve stage — `resolveActiveEffects` (gather → guards → expand → dedupe → facts), in dependency order.                                               |
 | `context.ts`                                                                             | `makeExprContext` / `ctxOf` — the `ctx` a formula reads (build + play vars).                                                                                   |
 | `plugin-registry.ts` · `plugin-host.ts` · `plugin-sandbox.ts` · `plugin-store.svelte.ts` | **L3** — see `plugins.md`.                                                                                                                                     |
-| `suggest.ts`                                                                             | "did you mean?" fuzzy hints for a typo'd token/target.                                                                                                         |
+| `../util/suggest.ts`                                                                     | "did you mean?" fuzzy hints for a typo'd token/target — OUTSIDE the module, called by `character/derive-targets.ts`. |
 
 ### The token DSL is snake_case, with `.` for namespacing
 
@@ -98,7 +98,7 @@ expression never contains one). `EFFECT_KIND` (`token-parser.ts`) is the closed 
 | `grant_roll`                 | `grant_roll:<id>:<expr>`                                | A named feature-granted rollable (Sneak Attack `Nd6`, Bardic Inspiration die); resolves to a dice formula → the DiceTray seam.                                                                          |
 | `damage_sensitivity`         | `damage_sensitivity:<resist\|immune\|vulnerable>:<type>` | Damage defense; applied immune→0 / resist→½ / vulnerable→×2 before temp-HP soak.                                                                                                                        |
 | `apply_condition`            | `apply_condition:<id>`                                  | Expand a condition row's own tokens ONE level (the condition's `effects` flow + register `has_condition.<id>`).                                                                                         |
-| `hp_max`                     | `flat_bonus:hp_max+<value>`                             | Max-HP contribution (Toughness/Aid), re-folded on a manual base.                                                                                                                                        |
+| `regain_on_initiative`       | `regain_on_initiative:<resource>:<n>`                   | When initiative is rolled, top `<resource>` back up to `<n>` (2024 Perfect Focus, Superior Inspiration). AUTO-applied with a notice, not a player click — RAW gives no choice. Same `kind:target:int` shape as `reroll`/`min_die`. |
 | `note`                       | `note:<free text>`                                      | DISPLAY-ONLY: a mechanic the engine can't model on a single-character sheet (attacks AGAINST you, auto-crit, sense/relational). Never folds, matches no target; shown distinctly. `;` separates a list. |
 | `blocks_concentration`       | `blocks_concentration`                                  | MARKER, no target: the carrying state forbids Concentration (RAW Rage). A fact the combat layer reads to drop or withhold it. |
 | `damage_reroll`              | `damage_reroll`                                         | MARKER, no target: once per turn you may reroll a WEAPON's damage dice and keep either (2024 Savage Attacker). Offered as a post-roll button, never auto-applied. |
@@ -153,8 +153,8 @@ target, so `half:skills` reads as "proficiency in half the skills"; and "half" r
 while this rung is a gain — a lesser proficiency, never a cut-down one.
 
 A known-kind token whose target is outside the vocabulary is kept **inert** and surfaced as a
-`unknown target "<t>" for <kind>` content-health issue (with a `suggest.ts` "did you mean?"),
-never folded onto nothing.
+`unknown target "<t>" for <kind>` content-health issue (with a `util/suggest.ts` "did you mean?",
+offered by `character/derive-targets.ts`), never folded onto nothing.
 
 ---
 
@@ -197,7 +197,9 @@ class?"). Boolean flags start with `is_`: `is_bloodied`, `is_raging`, `is_concen
 **Operators** (precedence high→low): `d` (dice) > unary `-` > `* / %` > binary `+ -` >
 comparisons (`< <= > >= == !=`) > `not` > `and` > `or`. Comparisons are **non-associative** —
 `5<=level<=10` is a parse error (spell it `5<=level and level<=10`). **No `?:` ternary.**
-Whitelisted functions: `if min max floor ceil round abs clamp sign` — nothing else.
+Whitelisted functions: `if min max floor ceil round abs clamp sign step var per_slot` — nothing
+else. `step(index, a->v, …)` is the level-table primitive (the `->` pair shape is legal ONLY
+inside it), `var()` is readability sugar, and `per_slot()` reads the cast-ephemeral slot vars.
 
 **The colon rule:** `:` is STRUCTURAL only (token delimiter + namespacing). An expression NEVER
 contains a `:`, so the delimiter is never ambiguous. That is why conditional values use `if()` and
@@ -367,7 +369,8 @@ zod revalidation, length-prefixed SHA-256 consent hash stored outside the dataDi
 counter). A handler returns declarative output (`contributions` / L1 `tokens`) that rides the
 existing fold; it can NEVER break derive (any failure degrades to an inert note). Three state
 channels: `passive` (READ state → contributions), `onUse` / `onEvent` (WRITE play-state, core-owned
-per actions.md; deferred to `api: 2`). **Desktop-only** — the web build ships no sandbox. Full
+per actions.md; deferred to `api: 2`). **Desktop-only** — the web build never loads the sandbox
+(it ships the chunk and never fetches it; `plugins.md` ▸ Lifecycle). Full
 normative contract, ctx/result schemas, budgets, and the security checklist: [`plugins.md`](plugins.md).
 
 ---

@@ -45,6 +45,7 @@
 		defaultDataDir,
 		setDataDirOverride,
 		pickDataDir,
+		openExternalUrl,
 	} from '$lib/storage/tauri';
 	import FirstRunModal from '$lib/components/FirstRunModal.svelte';
 	import MobileWarning from '$lib/components/MobileWarning.svelte';
@@ -153,9 +154,9 @@
 			event.preventDefault();
 			const target = externalLinkToOpen(href, location.origin);
 			if (target === null) return; // cancelled, but not a scheme we hand to the OS either
-			void import('@tauri-apps/plugin-opener')
-				.then(({ openUrl }) => openUrl(target))
-				.catch((e: unknown) => logger.warn('could not open link', { href, e }));
+			void openExternalUrl(target).catch((e: unknown) =>
+				logger.warn('could not open link', { href, e }),
+			);
 		};
 		document.addEventListener('click', onClick, true);
 		return () => document.removeEventListener('click', onClick, true);
@@ -310,9 +311,10 @@
 		class="feedback"
 		onclick={() => (showDiagnostics = true)}
 		title={$_('feedback.title')}
+		aria-label={$_('feedback.link')}
 	>
 		<Icon name="bug" size={13} />
-		{$_('feedback.link')}
+		<span class="control-label">{$_('feedback.link')}</span>
 	</button>
 	<div class="chips">
 		<LangSwitcher />
@@ -360,7 +362,7 @@
 			aria-label={$_('nav.openCommandPalette')}
 		>
 			<Icon name="search" size={13} />
-			Ctrl K
+			<span class="control-label">Ctrl K</span>
 		</button>
 	</div>
 </header>
@@ -528,6 +530,50 @@
 	/* full-bleed routes (translate): use the whole width, keep only a small edge gutter */
 	main.full-bleed {
 		padding-inline: var(--space-5);
+	}
+	/* A narrow window — a phone, or a desktop window dragged small. The topbar is the one piece of
+	   chrome that cannot shrink on its own: its five groups on a single row measure 763px against a
+	   393px viewport, which scrolls the whole DOCUMENT sideways on every route. So it wraps —
+	   identity and controls keep the first row, the nav takes a scrollable second one — and the two
+	   labelled controls collapse to their icon. Both carry an aria-label, because the bug chip is the
+	   ONLY way into the diagnostics bundle: it may shrink, never disappear. The threshold matches
+	   MobileWarning's own, so the banner and the layout agree on where narrow starts. */
+	@media (max-width: 800px) {
+		.topbar {
+			flex-wrap: wrap;
+			gap: var(--space-2);
+			padding-inline: var(--space-3);
+		}
+		.nav {
+			/* last in visual order, so the wrap puts it on a row of its own below the controls */
+			order: 1;
+			flex: 1 0 100%;
+			overflow-x: auto;
+		}
+		/* the primary control on a phone, and a finger is not a mouse pointer */
+		.nav a {
+			padding-block: var(--space-2);
+		}
+		.chips {
+			flex-wrap: wrap;
+			justify-content: flex-end;
+		}
+		.control-label {
+			display: none;
+		}
+		/* with the label gone a 13px glyph is the whole button, which is under any usable tap target */
+		.feedback,
+		.search-chip {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 32px;
+			min-height: 32px;
+		}
+		main,
+		main.full-bleed {
+			padding-inline: var(--space-3);
+		}
 	}
 	:global(body) {
 		height: 100dvh;

@@ -539,7 +539,9 @@
 				{groups}
 				bind:searchValue={query}
 				{showEdition}
-				searchPlaceholder="Search {selectedType.replace(/_/g, ' ')}…"
+				searchPlaceholder={$_('compendium.searchType', {
+					values: { type: $_(`contentType.${selectedType}`) },
+				})}
 				selectedId={selected?.effectiveId ?? null}
 				onselect={(e) => openEntry(e.row)}
 			/>
@@ -699,7 +701,7 @@
 		inset-inline-start: 0;
 		background: var(--color-surface);
 		border: 1px solid var(--color-border-strong);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-1-5);
 		box-shadow: var(--shadow-2);
 		min-width: 160px;
@@ -739,6 +741,21 @@
 	.ddchips.scroll {
 		max-height: 168px;
 		overflow: auto;
+	}
+	/* On a narrow window a 320px menu opened by a button that sits half-way across the row runs off the
+	   right edge. Anchoring to the controls ROW instead of to the button drops it straight down the
+	   width of the row, which is the only width guaranteed to fit. */
+	@media (max-width: 800px) {
+		.controls {
+			position: relative;
+		}
+		.disclosure {
+			position: static;
+		}
+		.dropdown-menu.wide {
+			width: auto;
+			inset-inline: 0;
+		}
 	}
 	.ddclear {
 		margin: var(--space-2) var(--space-1) 2px;
@@ -796,7 +813,7 @@
 		padding: var(--space-1-5);
 		background: var(--color-surface);
 		border: 1px solid var(--color-border-strong);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		box-shadow: var(--shadow-2);
 	}
 	.mode-item {
@@ -807,7 +824,7 @@
 		text-align: start;
 		padding: var(--space-2) var(--space-2-5);
 		border: 0;
-		border-radius: 7px;
+		border-radius: var(--radius);
 		background: transparent;
 		color: var(--color-text);
 		cursor: pointer;

@@ -281,7 +281,7 @@
 						type="color"
 						value={value.trim()}
 						oninput={(e) => setToken(editing.id, token, e.currentTarget.value)}
-						aria-label="{label(token)} colour"
+						aria-label={$_('settings.themes.tokenColorLabel', { values: { token: label(token) } })}
 					/>
 				{:else}
 					<span class="swatch swatch-lg" style="background: {value || 'transparent'}"></span>
@@ -352,7 +352,7 @@
 	.swatch {
 		width: 18px;
 		height: 18px;
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		border: 1px solid var(--color-border-strong);
 	}
 	.swatch-lg {
@@ -409,7 +409,7 @@
 		height: 26px;
 		padding: 0;
 		border: 1px solid var(--color-border-strong);
-		border-radius: 4px;
+		border-radius: var(--radius-xs);
 		background: transparent;
 		cursor: pointer;
 	}

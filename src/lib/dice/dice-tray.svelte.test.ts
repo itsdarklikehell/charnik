@@ -159,12 +159,76 @@ describe('editing pills', () => {
 		expect(diceTray.lines[0]?.pills).toHaveLength(0);
 	});
 
+	it('keeps a penalty die a penalty when its count is nudged', () => {
+		// the pill's TEXT is what an unfold puts back in the draft, so a nudge that dropped the sign made
+		// a double-click turn a Bane die into a bonus — an 8-point swing with nothing on screen to say so
+		diceTray.prefill({
+			label: 'Save',
+			test: {
+				dice: { 20: 1 },
+				mod: 0,
+				bonusDice: [{ count: 1, sides: 4, sign: -1, source: 'Bane' }],
+			},
+		});
+		diceTray.bumpPill(0, 1, 1);
+		expect(diceTray.lines[0]?.pills[1]).toMatchObject({ count: 2, sign: -1, text: '-2d4' });
+		diceTray.unfold(0, 1);
+		diceTray.commit(0);
+		expect(diceTray.lines[0]?.pills[1]).toMatchObject({ count: 2, sides: 4, sign: -1 });
+	});
+
 	it('moves a pill from one line to the other, re-deriving both', () => {
 		diceTray.addDamageLine();
 		typeInto(0, 'd20 2d6 ');
 		diceTray.movePill(0, 1, 1);
 		expect(diceTray.lines[0]?.pills).toHaveLength(1);
 		expect(diceTray.lines[1]?.pills[0]).toMatchObject({ sides: 6 });
+	});
+
+	it('taking a pill out leaves a never-moved caret AT the end, not one token short of it', () => {
+		// the guard read `caretAt`, which clamps the AT_END sentinel to the line's length — so an
+		// untouched caret reported "in front of the last pill" and was materialised one place left
+		typeInto(0, '1d20 +3 +5 ');
+		diceTray.removePill(0, 0);
+		typeInto(0, '+9 ');
+		expect(diceTray.lines[0]?.pills.map((p) => p.text)).toEqual(['+3', '+5', '+9']);
+	});
+
+	it('…and a bound still lands on the die it was typed for', () => {
+		// `addToken` binds the last die LEFT of the caret, so the same slip turned a Reliable Talent
+		// floor into an unaccounted fragment that blocked the roll
+		diceTray.addDamageLine();
+		typeInto(0, '1d6 1d20 ');
+		diceTray.removePill(0, 0);
+		typeInto(0, '>10 ');
+		expect(diceTray.issues.filter((i) => i.blocking)).toEqual([]);
+		expect(diceTray.rollable).toBe(true);
+	});
+
+	it('refuses a damage type dragged onto a test line — the menu withholds it there', () => {
+		diceTray.addDamageLine();
+		typeInto(1, '2d6 fire ');
+		diceTray.movePill(1, 1, 0);
+		expect(diceTray.lines[0]?.pills).toHaveLength(0);
+		expect(diceTray.lines[1]?.pills.map((p) => p.text)).toContain('fire');
+	});
+
+	it('a damage part made only of EFFECT dice is still damage', () => {
+		// `dealsDamage` is asked after the effects fold in: a `+1d6` rider on a weapon whose own damage
+		// folds to zero (Unarmed Strike at STR 8, a Net at modifier 0) had no damage line at all
+		diceTray.prefill({
+			label: 'Strike',
+			test: { dice: { 20: 1 }, mod: 5 },
+			damage: [
+				{
+					dice: {},
+					mod: 0,
+					type: 'bludgeoning',
+					bonusDice: [{ count: 1, sides: 6, sign: 1, source: 'Divine Favor' }],
+				},
+			],
+		});
+		expect(diceTray.lines.map((l) => l.role)).toContain(ROLLER_ROLE.damage);
 	});
 
 	it('lands a header die in the line the caret is in', () => {
@@ -273,5 +337,26 @@ describe('prefill', () => {
 	it('has no second line when there is no damage — a check is one line', () => {
 		diceTray.prefill({ label: 'Perception', test: { dice: { 20: 1 }, mod: 4 } });
 		expect(diceTray.lines).toHaveLength(1);
+	});
+
+	it("carries the label's ICU VALUES into the entry it rolls, not only its key", () => {
+		// a numbered strike's name is a key plus its numbers; the tray used to forward the key alone, so
+		// the recorded row asked the catalog for a numbering frame with no numbers in it
+		diceTray.prefill({
+			label: 'Unarmed Strike 1/2',
+			labelKey: 'combat.log.attackNumbered',
+			labelValues: { n: 1, of: 2, name: { catalog: 'attacks', id: 'unarmed_strike' } },
+			test: { dice: { 20: 1 }, mod: 5 },
+		});
+		const [entry] = diceTray.roll();
+		expect(entry?.labelKey).toBe('combat.log.attackNumbered');
+		expect(entry?.labelValues).toEqual({
+			n: 1,
+			of: 2,
+			name: { catalog: 'attacks', id: 'unarmed_strike' },
+		});
+		// and a tray reset forgets them, so the next roll does not inherit another roll's numbers
+		diceTray.reset();
+		expect(diceTray.roll()[0]?.labelValues).toBeUndefined();
 	});
 });

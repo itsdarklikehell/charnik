@@ -27,6 +27,7 @@
 	import { classCasts } from '$lib/character/spellcasting';
 	import ClassPicker from './ClassPicker.svelte';
 	import { SYSTEMS, splitList, type ContentType } from '$lib/content/schemas';
+	import { systemShortLabel } from '$lib/rules/pipeline';
 	import {
 		writeDraft,
 		readDraft,
@@ -280,8 +281,14 @@
 
 <article class="detail-body edit">
 	<div class="deyebrow">
-		{type.replace(/_/g, ' ')} · {editing ? 'edit' : 'new homebrew'}{#if editShipped}
-			· fork to homebrew{/if}
+		{$_(
+			editShipped
+				? 'homebrewForm.eyebrowFork'
+				: editing
+					? 'homebrewForm.eyebrowEdit'
+					: 'homebrewForm.eyebrowNew',
+			{ values: { type: $_(`contentType.${type}`) } },
+		)}
 	</div>
 	<input class="titlein" placeholder={$_('contentField.name')} bind:value={draft.name_en} />
 	<div class="id-row">
@@ -304,9 +311,9 @@
 		{#each SYSTEMS as sys (sys)}
 			<button
 				type="button"
-				class="syschip"
+				class="chip syschip"
 				class:on={hasSystem(sys)}
-				onclick={() => toggleSystem(sys)}>{sys}</button
+				onclick={() => toggleSystem(sys)}>{systemShortLabel(sys)}</button
 			>
 		{/each}
 	</div>
@@ -536,7 +543,7 @@
 	.shipped-warn {
 		border: 1px solid var(--color-danger);
 		background: var(--color-danger-soft);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-3) 14px;
 		margin-bottom: var(--space-3);
 	}
@@ -556,24 +563,10 @@
 		gap: var(--space-2);
 		margin-bottom: var(--space-4);
 	}
+	/* the global `.chip`, wider — the base, its hover and its selected state all come from there
+	   rather than being re-typed here (AGENTS.md ▸ a shared class lives in exactly one place) */
 	.syschip {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
 		padding: var(--space-1) var(--space-3);
-		background: transparent;
-		color: var(--color-text-muted);
-		cursor: pointer;
-	}
-	.syschip:hover {
-		border-color: var(--color-border-strong);
-		color: var(--color-text);
-	}
-	.syschip.on {
-		border-color: var(--color-accent);
-		color: var(--color-accent-bright);
-		background: var(--color-accent-soft);
 	}
 	.meta-cell {
 		display: flex;
@@ -581,7 +574,7 @@
 		gap: var(--space-1);
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-1-5) var(--space-2-5);
 	}
 	.meta-cell .meta-key {
@@ -611,7 +604,7 @@
 		align-self: flex-start;
 		width: 38px;
 		height: 20px;
-		border-radius: 999px;
+		border-radius: var(--radius-full);
 		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface-2);
 		position: relative;
@@ -696,7 +689,7 @@
 		line-height: 1.5;
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		color: var(--color-text);
 		padding: var(--space-2-5) var(--space-3);
 		margin-bottom: var(--space-3);
@@ -709,7 +702,7 @@
 	.issues {
 		border: 1px solid var(--color-danger);
 		background: var(--color-danger-soft);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-2-5) 14px;
 		margin-bottom: var(--space-3);
 		font-size: var(--font-size-sm);

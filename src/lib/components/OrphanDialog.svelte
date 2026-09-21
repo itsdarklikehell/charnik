@@ -21,6 +21,7 @@
 	} from '$lib/drafts/store';
 	import { getUserStorage } from '$lib/storage/provider';
 	import { rowName, type ContentGraph, type LoadedRow } from '$lib/content/loader';
+	import LangSwitcher from './LangSwitcher.svelte';
 
 	let {
 		orphans,
@@ -54,7 +55,7 @@
 	const oldId = $derived(current ? draftIdLabel(current.target) : '');
 
 	function draftIdLabel(t: DraftTarget): string {
-		if (t.kind === 'add') return '(new entry)';
+		if (t.kind === 'add') return $_('drafts.newEntryLabel');
 		return `${t.type}:${t.source}:${t.id}${t.kind === 'translate' ? ` · ${t.locale}` : ''}`;
 	}
 
@@ -157,6 +158,7 @@
 	use:trapFocus
 >
 	<header class="dialog-head">
+		<div class="dialog-lang-corner"><LangSwitcher /></div>
 		<span class="dialog-badge warn"><Icon name="flag" size={17} /></span>
 		<h2 id="orphan-title" class="dialog-title">
 			{$_('orphan.title')}{#if total > 1}<span class="count-pill"
@@ -339,7 +341,7 @@
 	.preview {
 		background: var(--color-surface-2);
 		border: 1px solid var(--color-border);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-3) 14px;
 	}
 	.pv-label {
@@ -379,7 +381,7 @@
 	}
 	.cf-pane {
 		border: 1px solid var(--color-border);
-		border-radius: 10px;
+		border-radius: var(--radius-md);
 		padding: var(--space-3) 14px;
 		background: var(--color-surface-2);
 		display: flex;

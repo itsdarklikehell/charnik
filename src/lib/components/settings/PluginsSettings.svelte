@@ -11,6 +11,7 @@
 		consentAndEnable,
 		disablePlugin,
 		enableConsented,
+		forgetPlugin,
 		setKillSwitch,
 		pluginStatus,
 		type PluginStatus,
@@ -112,6 +113,15 @@
 							{$_(actionKey[status])}
 						</button>
 					{/if}
+					<!-- the way out of a consent: disabling only stops it for now, and the button above then
+					     re-enables it with no dialog. Offered wherever a consent is on record. -->
+					{#if plugins.prefs.consent[p.namespace] !== undefined}
+						<button
+							class="pill-btn"
+							title={$_('settings.plugins.forgetTitle')}
+							onclick={() => forgetPlugin(p.namespace)}>{$_('settings.plugins.forget')}</button
+						>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -187,7 +197,7 @@
 		font-size: var(--font-size-xs);
 		font-family: var(--font-mono);
 		padding: 2px var(--space-2);
-		border-radius: 20px;
+		border-radius: var(--radius-full);
 		border: 1px solid var(--color-border);
 		color: var(--color-text-muted);
 	}

@@ -30,9 +30,8 @@
 				>
 			</div>
 			<div class="hitpoints-value" use:provenance={why(s.maxHp, $_)}>
-				{c.play.hp.current}<small>
-					/ {c.play.hp.max ?? s.maxHp.value}</small
-				>{#if c.play.hp.temp > 0}<span class="temp">+{c.play.hp.temp} {$_('combat.hp.temp')}</span
+				{c.play.hp.current}<small> / {combat.hpMax}</small>{#if c.play.hp.temp > 0}<span
+						class="temp">+{c.play.hp.temp} {$_('combat.hp.temp')}</span
 					>{/if}
 			</div>
 			<div class="hitpoints-bar">
@@ -289,7 +288,7 @@
 		font-size: var(--font-size-body);
 		background: var(--color-surface-2);
 		border: 1px solid var(--color-border);
-		border-radius: 7px;
+		border-radius: var(--radius);
 		color: var(--color-text);
 		padding: var(--space-1);
 	}
@@ -298,7 +297,7 @@
 		font-weight: 600;
 		font-size: var(--font-size-xs);
 		padding: var(--space-1) var(--space-2-5);
-		border-radius: 7px;
+		border-radius: var(--radius);
 		cursor: pointer;
 	}
 	.hp-btn.damage {
@@ -319,7 +318,7 @@
 		width: 100%;
 		padding: var(--space-1) var(--space-2);
 		font-size: var(--font-size-xs);
-		border-radius: 7px;
+		border-radius: var(--radius);
 		background: var(--color-surface-2);
 		border: 1px solid var(--color-border);
 		color: var(--color-text);

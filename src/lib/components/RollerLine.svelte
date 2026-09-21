@@ -138,7 +138,8 @@
 		// walk a token left: what is typed folds back into the line and the token before it opens.
 		// Ctrl+Z is the same move — the browser's own undo would restore the TEXT of a token while the
 		// pill it became stayed in the line, which is a line that says the same thing twice.
-		if (event.key === 'z' && held) {
+		// the PHYSICAL key (AGENTS.md ▸ Taste): on a Ukrainian layout — a shipped locale — `key` is "я"
+		if (event.code === 'KeyZ' && held) {
 			event.preventDefault();
 			void step(true);
 			return;
@@ -172,6 +173,19 @@
 		// Tab with no menu open is still Tab — the roller must not trap focus
 		if (event.key === 'Enter' || (event.key === 'Tab' && diceTray.menu.length)) {
 			event.preventDefault();
+			// Enter FINISHES what is pending — the token being typed, or the suggestion under the
+			// highlight. With neither, it had nothing to finish and did nothing at all, which is the one
+			// state where the press obviously means "roll it" (playtest). Ctrl+Enter is unchanged: it
+			// rolls from anywhere, including a header die button with no line focused.
+			if (
+				event.key === 'Enter' &&
+				!diceTray.menu.length &&
+				!(diceTray.drafts[index] ?? '').trim()
+			) {
+				event.stopPropagation();
+				roll();
+				return;
+			}
 			diceTray.commit(index);
 			return;
 		}
@@ -274,7 +288,9 @@
 			role="button"
 			tabindex="-1"
 			title={pill.kind === PILL_KIND.damageType
-				? `${pill.type}${pill.inherited ? ' · inherited from the group on its left' : ''}`
+				? pill.inherited
+					? $_('roller.inheritedType', { values: { type: pill.type ?? '' } })
+					: (pill.type ?? '')
 				: pill.text}
 			ondragstart={(e) => e.dataTransfer?.setData('text/roller-pill', `${index}:${at}`)}
 			onclick={(e) => {
@@ -306,6 +322,10 @@
 				{:else}
 					<span class="roller-value muted-value">{pill.type}</span>
 				{/if}
+				<!-- the pill OPENS something, and nothing said so: the playtest found the type menu by
+				     accident. The same chevron every menu control in the app wears (the duration select,
+				     the base-item chooser) is what marks it, rather than a cue invented for one pill. -->
+				<Icon name="chevron-down" size={10} />
 			{/if}
 			{#if sourceOf(pill)}<span class="roller-source">{sourceOf(pill)}</span>{/if}
 			{#if pill.kind === PILL_KIND.dice || pill.kind === PILL_KIND.flat}
@@ -506,7 +526,7 @@
 		flex: none;
 		width: 3px;
 		align-self: stretch;
-		border-radius: 2px;
+		border-radius: var(--radius-xs);
 		background: var(--color-accent);
 	}
 	.roller-stripe.damage {
@@ -531,13 +551,17 @@
 		min-height: 36px;
 		padding: var(--space-1-5) var(--space-2);
 		background: transparent;
-		border: 1px solid transparent;
+		/* A field you can type into says so before you click it. It used to be transparent at rest, so
+		   the only way to find out there was a field here was to click where you guessed one was —
+		   `ui.md` ▸ Every interactive element says so. The edge is quiet; focus is what brightens it. */
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius);
 	}
 	/* focus is NEUTRAL and light on purpose: colouring it by role would make "active" and "this is a
-	   test" the same signal, and then neither reads */
+	   test" the same signal, and then neither reads. It reads as focus by being a STEP up from the
+	   resting edge rather than by appearing out of nothing. */
 	.roller-field.focused {
-		border-color: var(--color-border);
+		border-color: var(--color-border-strong);
 	}
 	.roller-field.menu-open {
 		border-radius: var(--radius) var(--radius) 0 0;
@@ -573,7 +597,7 @@
 		align-items: center;
 		gap: var(--space-1);
 		padding: var(--space-1) var(--space-2);
-		border-radius: 7px;
+		border-radius: var(--radius);
 		background: var(--color-surface-2);
 		border: 1px solid var(--color-border-strong);
 		font-size: var(--font-size-xs);
@@ -587,8 +611,19 @@
 		background: color-mix(in srgb, var(--color-text) 8%, var(--color-surface-2));
 	}
 	.roller-pill.type-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
 		padding: var(--space-1) var(--space-1-5);
 		color: var(--color-text-muted);
+	}
+	/* the chevron is quieter than the type it belongs to until the pill is under the pointer */
+	.roller-pill.type-pill :global(svg:last-child) {
+		opacity: 0.55;
+	}
+	.roller-pill.type-pill:hover :global(svg:last-child),
+	.roller-pill.type-pill:focus :global(svg:last-child) {
+		opacity: 1;
 	}
 	/* an inherited type is drawn as the same pill, dashed — so inheritance is visible and editable
 	   rather than a silent assumption (§7) */
@@ -733,7 +768,7 @@
 		width: 100%;
 		padding: var(--space-1-5) var(--space-2);
 		border: 0;
-		border-radius: 7px;
+		border-radius: var(--radius);
 		background: transparent;
 		color: var(--color-text-muted);
 		font-size: var(--font-size-xs);
@@ -836,7 +871,7 @@
 		justify-content: center;
 		width: 30px;
 		height: 30px;
-		border-radius: 7px;
+		border-radius: var(--radius);
 		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface-2);
 		font-family: var(--font-display);

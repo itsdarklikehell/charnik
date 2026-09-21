@@ -12,7 +12,7 @@
  * a walk started from there hands the caret back to the search box rather than leaving a focus ring
  * on one option while Enter takes another.
  */
-import { walkOptions, optionDomId } from './option-walk';
+import { walkOptions, optionDomId } from '$lib/util/option-walk';
 
 /** What the walk needs from the picker around it, read fresh on every key. */
 export interface PickerReadingHost {
@@ -106,7 +106,11 @@ export class PickerReading {
 	 * has left.
 	 */
 	fromOptions = (event: KeyboardEvent): void => {
-		if (!walkOptions(event, this.host())) return;
+		// `onenter` is dropped, not just left unused: `walkOptions` fires it whenever the host carries
+		// one, and a host that has one (a language chip, which has no article to read) would have Enter
+		// cancel the FOCUSED chip's own click and toggle the HIGHLIGHTED one instead.
+		const { onenter: _fromSearchOnly, ...host } = this.host();
+		if (!walkOptions(event, host)) return;
 		this.search?.focus();
 		this.revealActive();
 	};

@@ -9,8 +9,10 @@
  * attunement cap, and using a consumable up.
  */
 import { toast } from 'svelte-sonner';
-import { t } from '$lib/i18n';
+import { t, translator } from '$lib/i18n';
 import {
+	addItem,
+	removeItem,
 	ATTUNEMENT_CAP,
 	attunedCount,
 	bumpQty,
@@ -23,9 +25,12 @@ import {
 	useOne,
 	type InventoryEntry,
 } from '$lib/character/inventory';
-import { COINS, purseWeightLb, type Purse } from '$lib/rules/currency';
+import { COINS, costSaid, purseWeightLb, type Purse } from '$lib/rules/currency';
+import { say } from '$lib/util/say';
 import { needsBaseItem, resolveItem, type ResolvedItem } from '$lib/content/resolved-item';
-import { rowName, type ContentGraph } from '$lib/content/loader';
+import { type ContentGraph } from '$lib/content/loader';
+import { localizedName } from '$lib/content/detail';
+import { app } from '$lib/stores/app.svelte';
 import { isRowActive } from '$lib/content/sources.svelte';
 import { tagInt, ITEM_TAG } from '$lib/content/item-tags';
 import type { Character } from '$lib/character/schema';
@@ -86,10 +91,17 @@ export class InventoryTracker {
 				entry,
 				// the ref itself is the last resort: a row whose item left the graph must still be
 				// visible and removable, never a blank line the user cannot act on
-				name: item ? rowName(item.row) : entry.item,
+				name: item ? localizedName(item.row, app.activeLocale) : entry.item,
 				item,
-				weightLb: Number(item?.row.data.weight_lb ?? 0),
-				meta: [item?.row.data.category ?? '', item?.damage ?? '', ac === null ? '' : `AC ${ac}`]
+				weightLb: item?.weightLb ?? 0,
+				meta: [
+					item?.row.data.category ?? '',
+					item?.damage ?? '',
+					ac === null ? '' : `AC ${ac}`,
+					// what it is worth, for the half of the game that is spending and selling. Magic items
+					// carry no price in either SRD, so the cell is simply absent for them rather than zero.
+					say(costSaid(item?.row.data.cost), translator()),
+				]
 					.filter(Boolean)
 					.join(' · '),
 				equippable: isEquippable(item),
@@ -136,8 +148,8 @@ export class InventoryTracker {
 	coinsLb = $derived(this.weighsCoins ? purseWeightLb(this.purse) : 0);
 
 	carriedLb = $derived(
-		carriedWeight(this.list, (ref) => Number(this.resolve(ref)?.row.data.weight_lb ?? 0)) +
-			this.coinsLb,
+		// through `resolveItem`, so a magic weapon weighs what the weapon it IS weighs
+		carriedWeight(this.list, (ref, base) => this.resolve(ref, base)?.weightLb ?? 0) + this.coinsLb,
 	);
 	capacityLb = $derived.by(() => this.getSheet()?.carryingCapacity.value ?? 0);
 	/** 0…1 for the load meter; 0 when nothing has told us a capacity yet. */
@@ -151,6 +163,11 @@ export class InventoryTracker {
 		const c = this.getCharacter();
 		if (c) c.build.inventory = next;
 	};
+
+	/** The shield this character carries, if any. The Combat toolbar's Shield toggle is this row's
+	 *  equip button under another name: a shield in HAND is what the AC counts (`deriveAc`), so there
+	 *  is one fact here and not a play flag beside it that could disagree. */
+	shield = $derived(this.rows.find((r) => r.item?.row.data.category === 'shield'));
 
 	equip = (ref: string) => this.write(toggleEquipped(this.list, ref));
 
@@ -180,6 +197,39 @@ export class InventoryTracker {
 
 	bump = (ref: string, by: number) => this.write(bumpQty(this.list, ref, by));
 
+	/**
+	 * Reorder what the character carries. The inventory ARRAY is the order — nothing new is stored,
+	 * and a reorder persists the way every other inventory edit does.
+	 *
+	 * Refs the caller does not name keep their places at the end rather than being dropped: a list
+	 * rebuilt from a drag is the view's idea of the list, and the character's is the one that counts.
+	 */
+	reorder = (refs: string[]) => {
+		const byRef = new Map(this.list.map((entry) => [entry.item, entry]));
+		const moved = refs.map((ref) => byRef.get(ref)).filter((e) => e !== undefined);
+		const rest = this.list.filter((entry) => !refs.includes(entry.item));
+		this.write([...moved, ...rest]);
+	};
+
+	/** The same reorder by keyboard — one step up or down, for the people a drag excludes. */
+	move = (ref: string, by: -1 | 1) => {
+		const order = this.list.map((entry) => entry.item);
+		const at = order.indexOf(ref);
+		const to = at + by;
+		if (at < 0 || to < 0 || to >= order.length) return;
+		const swapped = order[to];
+		if (swapped === undefined) return;
+		order[to] = ref;
+		order[at] = swapped;
+		this.reorder(order);
+	};
+
+	/** Own one more of something, and put one back. Both are BUILD writes made from play: the builder
+	 *  still decides what a character owns, and this is the same act reached from where you notice it
+	 *  — a looted item mid-session. Quantity beyond the first is `bump`'s job. */
+	add = (ref: string) => this.write(addItem(this.list, ref));
+	remove = (ref: string) => this.write(removeItem(this.list, ref));
+
 	/** Every mundane item a template could BE, of the same kind as the template asking: a weapon
 	 *  template offers weapons, an armour one offers armour. Mundane = no rarity, which is what marks
 	 *  an item magical (`content.md`), and a row that states nothing itself is a template too and has
@@ -195,7 +245,7 @@ export class InventoryTracker {
 			if (row.data.category !== template.data.category || row.data.rarity) continue;
 			// a row that would itself need a base has nothing to lend
 			if (needsBaseItem(resolveItem(graph, row))) continue;
-			out.push({ ref: `item:${row.source}:${row.id}`, name: rowName(row) });
+			out.push({ ref: `item:${row.source}:${row.id}`, name: localizedName(row, app.activeLocale) });
 		}
 		return out.sort((a, b) => a.name.localeCompare(b.name));
 	};

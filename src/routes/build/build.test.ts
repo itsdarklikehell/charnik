@@ -35,6 +35,11 @@ async function graphOf(): Promise<ContentGraph> {
 			'id,systems,source,name_en,category,ability_choice,skill_choice',
 			`alert,5.5e,${S},Alert,general,,`,
 			`tough,5.5e,${S},Tough,general,,`,
+			// two half-feats with DISJOINT +1 options, and a third overlapping one: what a slot keeps
+			// across a swap is decided by whether the new feat still offers the ability
+			`wide,5.5e,${S},Wide Reader,general,"int,cha",`,
+			`grappler,5.5e,${S},Grappler,general,"str,dex",`,
+			`lore,5.5e,${S},Lore Keeper,general,"cha,wis",`,
 			`skilled,5.5e,${S},Skilled,origin,,3`,
 			// a half-feat origin feat: no SRD background grants one, a homebrew pack may
 			`gifted,5.5e,${S},Gifted,origin,"str,dex",`
@@ -115,6 +120,24 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		expect(out.build.spells.map((s) => s.spell)).toContain(`spell:${S}:fireball`);
 	});
 
+	it('carries the languages and tools a player TYPED, which no content row backs', () => {
+		const saved = savedCharacter();
+		saved.build.customLanguages = ['Thieves’ cant of my table'];
+		saved.build.customTools = ['Glassblower’s tools'];
+		build.hydrate(saved);
+		const out = build.assembled;
+
+		expect(out.build.customLanguages).toEqual(['Thieves’ cant of my table']);
+		expect(out.build.customTools).toEqual(['Glassblower’s tools']);
+		// and a save written before the two columns existed still parses, with nothing typed in it
+		const legacy = characterSchema.parse({
+			...saved,
+			build: { ...saved.build, customLanguages: undefined, customTools: undefined },
+		});
+		expect(legacy.build.customLanguages).toEqual([]);
+		expect(legacy.build.customTools).toEqual([]);
+	});
+
 	it('preserves item attunement through the hydrate → assemble round-trip (D15)', () => {
 		const saved = savedCharacter();
 		saved.build.inventory = [
@@ -125,6 +148,25 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		expect(out.build.inventory).toEqual([
 			{ item: `item:${S}:ring_of_protection`, qty: 1, equipped: true, attuned: true }
 		]);
+	});
+
+	it('a round trip with NOTHING clicked changes no play-side decision the save recorded', () => {
+		// the guard the dropped-field family needed: `attuned`, then `base` (which weapon a template
+		// magic item IS), then every prepared flag were each lost by a mapper that copies field by field
+		const saved = savedCharacter();
+		saved.build.inventory = [
+			{ item: `item:${S}:flame_tongue`, qty: 1, equipped: true, attuned: true, base: `item:${S}:longsword` }
+		];
+		saved.build.spells = [
+			{ spell: `spell:${S}:fireball`, prepared: false, alwaysPrepared: false }, // put away by the player
+			{ spell: `spell:${S}:light`, prepared: true, alwaysPrepared: true } // granted by the class
+		];
+		const parsed = characterSchema.parse(saved);
+		build.hydrate(parsed);
+		const out = build.assembled;
+
+		expect(out.build.inventory).toEqual(parsed.build.inventory);
+		expect(out.build.spells).toEqual(parsed.build.spells);
 	});
 
 	it('derives ASI/feat slots from the class asi_levels data (Fighter gets 6 & 14)', () => {
@@ -368,6 +410,27 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		await build.drafts.discard();
 	});
 
+	it('a failed Create says so, returns null, and leaves nothing half-done', async () => {
+		const storage = getUserStorage();
+		build.reset();
+		build.graph = graph;
+		build.draft.name = 'Doomed';
+		build.draft.classes = [
+			{ ...newClassRow(), classId: `class:${S}:fighter`, subclassId: null, level: 1 },
+		];
+		build.draft.speciesId = `species:${S}:hardy`;
+		build.draft.backgroundId = `background:${S}:prodigy`;
+		build.feats.setSlotFeatAbility(ORIGIN_SLOT_KEY, 'dex');
+		build.draft.skills = ['arcana', 'history'];
+
+		const write = vi.spyOn(storage, 'write').mockRejectedValue(new Error('disk full'));
+		// the button does `const id = await build.save()` — a rejection here is an unhandled rejection
+		// in an onclick, which is the one failure shape the user cannot see
+		await expect(build.save()).resolves.toBeNull();
+		expect(build.saving).toBe(false);
+		write.mockRestore();
+	});
+
 	it('a class picker left open on a removed row cannot empty the shared pools (B4)', () => {
 		build.classRows.setClass(0, `class:${S}:wizard`);
 		build.draft.skills = ['arcana'];
@@ -393,6 +456,30 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		];
 		build.classRows.setClass(1, `class:${S}:fighter`);
 		expect(build.draft.classes[1]?.classId).toBeNull();
+		expect(build.classRows.totalLevel).toBe(20);
+	});
+
+	it('a picked portrait does not survive into the next build', () => {
+		// the VM is a singleton and `portraitSource` prefers a pick over the stored file, so bytes left
+		// behind by an abandoned build showed on the next character AND overwrote their own portrait
+		build.pickedPhoto = { bytes: new Uint8Array([1, 2, 3]), ext: 'webp', mime: 'image/webp' };
+		build.reset();
+		expect(build.pickedPhoto).toBeNull();
+
+		build.pickedPhoto = { bytes: new Uint8Array([1, 2, 3]), ext: 'webp', mime: 'image/webp' };
+		build.hydrate(savedCharacter());
+		expect(build.pickedPhoto).toBeNull();
+		expect(build.portraitSource?.kind).not.toBe('picked');
+	});
+
+	it('a level set before the class does NOT lock that class out at 20', () => {
+		// `totalLevel`'s `|| 1` is a display floor; when it entered the arithmetic, taking the first
+		// class was computed as level + 1 — so a blank row walked to 20 could never be filled
+		build.draft.classes = [
+			{ ...newClassRow(), classId: null, subclassId: null, level: 20 },
+		];
+		build.classRows.setClass(0, `class:${S}:fighter`);
+		expect(build.draft.classes[0]?.classId).toBe(`class:${S}:fighter`);
 		expect(build.classRows.totalLevel).toBe(20);
 	});
 
@@ -588,6 +675,21 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		expect(build.todos.map((t) => t.kind)).not.toContain('originFeat');
 	});
 
+	it('a feat-granted skill counts as proficient, so expertise on it is offered and survives assemble', () => {
+		build.draft.backgroundId = `background:${S}:scholar`; // grants Skilled
+		build.feats.toggleSlotFeatSkill(ORIGIN_SLOT_KEY, 'stealth', 3);
+		// the derive reads `build.skills` + `build.featSkills` as one set; the picker must agree
+		expect(build.skillPicks.isProficient('stealth')).toBe(true);
+		// …and the feat's OWN picker must not read its grant back as taken elsewhere
+		expect(build.feats.featSkillTakenElsewhere(ORIGIN_SLOT_KEY, 'stealth')).toBe(false);
+		build.draft.classes = [
+			{ ...newClassRow(), classId: `class:${S}:rogue`, subclassId: null, level: 1 },
+		];
+		expect(build.skillPicks.expertiseOffered('stealth')).toBe(true);
+		build.skillPicks.toggleExpertise('stealth');
+		expect(build.assembled.build.expertise).toContain('stealth');
+	});
+
 	it("a granted half-feat's +1 is asked for, and reaches the ability score (B13)", () => {
 		build.draft.abilities = { str: 8, dex: 14, con: 14, int: 15, wis: 10, cha: 12 };
 		build.draft.backgroundId = `background:${S}:prodigy`;
@@ -663,6 +765,88 @@ describe('BuildVM · hydrate → assemble round-trip (behavioral)', () => {
 		build.classRows.bumpClassLevel(0, -1);
 		expect(build.draft.classes[0]?.level).toBe(1);
 		expect(build.classRows.canLowerLevel(0)).toBe(false); // level 1 is the floor for everyone
+	});
+
+	it('moving a saved ASI to another ability grants the new one ONLY, however often it moves', () => {
+		build.draft.name = 'Mover';
+		build.draft.classes = [
+			{ ...newClassRow(), classId: `class:${S}:fighter`, subclassId: null, level: 8 },
+		];
+		build.draft.abilities = { str: 15, dex: 14, con: 14, int: 10, wis: 10, cha: 8 };
+		const key = build.feats.featSlots[0]?.key ?? '';
+		build.feats.setSlotFeat(key, ASI);
+		build.feats.toggleAsiPick(key, 'str'); // shape '2' → +2 STR
+		let saved = characterSchema.parse(build.assembled);
+		expect(saved.build.abilityBoosts).toEqual({ str: 2 });
+
+		// re-open (the level-up path) and move the pick: the ability it LEFT keeps nothing. The residue
+		// is measured against the picks the SAVE held, so there is nothing for the old one to survive on.
+		for (const [from, to] of [['str', 'dex'], ['dex', 'con'], ['con', 'int']] as const) {
+			build.reset();
+			build.graph = graph;
+			build.hydrate(saved);
+			build.feats.toggleAsiPick(key, from); // un-pick, then take the other — what the picker does
+			build.feats.toggleAsiPick(key, to);
+			expect(build.assembled.build.abilityBoosts).toEqual({ [to]: 2 });
+			saved = characterSchema.parse(build.assembled);
+		}
+
+		// the same arithmetic one door over: swapping the ASI for a feat takes its +2 with it
+		build.reset();
+		build.graph = graph;
+		build.hydrate(saved);
+		build.feats.setSlotFeat(key, `feat:${S}:alert`);
+		expect(build.assembled.build.abilityBoosts).toEqual({});
+		expect(build.assembled.build.feats).toContain(`feat:${S}:alert`);
+	});
+
+	it("a half-feat swap keeps a +1 the new feat still offers and re-points one it does not", () => {
+		build.draft.classes = [
+			{ ...newClassRow(), classId: `class:${S}:fighter`, subclassId: null, level: 4 },
+		];
+		build.draft.abilities = { str: 15, dex: 14, con: 14, int: 10, wis: 10, cha: 8 };
+		const key = build.feats.featSlots[0]?.key ?? '';
+
+		build.feats.setSlotFeat(key, `feat:${S}:wide`); // int / cha → defaults to int
+		expect(build.draft.slotFeatAbility[key]).toBe('int');
+		build.feats.setSlotFeatAbility(key, 'cha');
+		expect(build.assembled.build.abilityBoosts).toEqual({ cha: 1 });
+
+		build.feats.setSlotFeat(key, `feat:${S}:lore`); // cha / wis → CHA is still on offer, so it stays
+		expect(build.draft.slotFeatAbility[key]).toBe('cha');
+		expect(build.assembled.build.abilityBoosts).toEqual({ cha: 1 });
+
+		build.feats.setSlotFeat(key, `feat:${S}:grappler`); // str / dex → CHA is not, so the +1 re-points
+		expect(build.draft.slotFeatAbility[key]).toBe('str');
+		expect(build.assembled.build.abilityBoosts).toEqual({ str: 1 });
+
+		// and a moved half-feat +1 does not leave residue behind on a level-up either
+		const saved = characterSchema.parse(build.assembled);
+		build.reset();
+		build.graph = graph;
+		build.hydrate(saved);
+		build.feats.setSlotFeatAbility(key, 'dex');
+		expect(build.assembled.build.abilityBoosts).toEqual({ dex: 1 });
+	});
+
+	it('un-picking a skill takes its expertise with it, so the cap stops evicting a live pick', () => {
+		build.draft.classes = [
+			{ ...newClassRow(), classId: `class:${S}:rogue`, subclassId: null, level: 1 },
+		];
+		expect(build.skillPicks.expertiseCap).toBe(2);
+		for (const skill of ['acrobatics', 'stealth']) build.skillPicks.toggleSkill(skill);
+		for (const skill of ['acrobatics', 'stealth']) build.skillPicks.toggleExpertise(skill);
+		expect(build.skillPicks.expertiseUsed).toBe(2);
+
+		build.skillPicks.toggleSkill('stealth'); // no longer proficient → no longer expert
+		expect(build.draft.expertise).toEqual(['acrobatics']);
+		expect(build.skillPicks.expertiseUsed).toBe(1);
+
+		// the freed slot really is free: the new pick lands beside the live one instead of evicting it
+		build.skillPicks.toggleSkill('perception');
+		build.skillPicks.toggleExpertise('perception');
+		expect(build.draft.expertise).toEqual(['acrobatics', 'perception']);
+		expect(build.assembled.build.expertise).toEqual(['acrobatics', 'perception']);
 	});
 
 	it('RV3: a picked ref survives its source being disabled; an unpicked one is filtered out', () => {

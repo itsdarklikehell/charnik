@@ -23,8 +23,8 @@ import { DIE_ROLE } from '$lib/rules/dice';
 import { combat } from './combat-view-model.svelte';
 import { startI18n, locale, waitLocale } from '$lib/i18n';
 import { ResourceTracker } from './resource-tracker.svelte';
-import { PanelLayout } from './panel-layout.svelte';
-import { UNARMED_STRIKE_ID, numberedAttackRollName } from '$lib/combat/attacks';
+import { PanelLayout, PANEL_MOVE } from './panel-layout.svelte';
+import { UNARMED_STRIKE_ID, numberedAttackRollName, attackNotes } from '$lib/combat/attacks';
 
 const S = 'SRD 5.2.1';
 
@@ -183,7 +183,8 @@ describe('CombatVM · concentration ends on 0 HP / damage reminder (CONCENTRATIO
 		combat.hpAmount = 6;
 		combat.damage();
 		expect(character.play.hp.current).toBe(14);
-		expect(combat.pendingConcentrationSave).toEqual({ dc: 10 }); // 6 dmg → DC max(10, 3) = 10
+		// 6 dmg → DC max(10, 3) = 10, owed for THIS spell
+		expect(combat.pendingConcentrationSave).toEqual({ dc: 10, spell: `spell:${S}:bless` });
 		expect(character.play.concentration).toBe(`spell:${S}:bless`); // never auto-dropped
 	});
 
@@ -222,6 +223,27 @@ describe('CombatVM · concentration ends on 0 HP / damage reminder (CONCENTRATIO
 		combat.damage();
 		combat.dropConcentrationFromSave();
 		expect(character.play.concentration).toBeNull();
+		expect(combat.pendingConcentrationSave).toBeNull();
+	});
+
+	it('an owed save does not outlive the concentration it was owed for', () => {
+		character.play.hp = { current: 30, max: 30, temp: 0 };
+		combat.cast(spellRow(graph, `spell:${S}:bless`, 'on')!, noModifiers);
+		combat.hpAmount = 20;
+		combat.damage();
+		expect(combat.pendingConcentrationSave).not.toBeNull();
+		// the next concentration spell REPLACES the first; the save owed for Bless is not owed for it
+		combat.cast(spellRow(graph, `spell:${S}:hold_person`, 'on')!, noModifiers);
+		expect(character.play.concentration).toBe(`spell:${S}:hold_person`);
+		combat.syncPendingConcentration();
+		expect(combat.pendingConcentrationSave).toBeNull();
+		// …and the same for a long rest, which ends concentration without touching the banner
+		character.play.hp.current = 30;
+		combat.hpAmount = 10;
+		combat.damage();
+		expect(combat.pendingConcentrationSave).not.toBeNull();
+		combat.resources.rest('long');
+		combat.syncPendingConcentration();
 		expect(combat.pendingConcentrationSave).toBeNull();
 	});
 
@@ -469,9 +491,9 @@ describe('CombatVM · structured upcast folds into the cast roll (UPCAST slice 1
 	});
 
 	it('a count cantrip (EB) does NOT die-multiply; a damage cantrip (Fire Bolt) still does (item 9)', () => {
-		combat.cast(spellRow(graph, `spell:${S}:fbolt`, 'on', 5)!, noModifiers); // char level 5
+		combat.cast(spellRow(graph, `spell:${S}:fbolt`, 'on', { charLevel: 5 })!, noModifiers); // char level 5
 		expect(partDiceOf('fire', 10)).toBe(2); // die-scaling: 1d10 → 2d10 at level 5
-		combat.cast(spellRow(graph, `spell:${S}:blast`, 'on', 5)!, noModifiers);
+		combat.cast(spellRow(graph, `spell:${S}:blast`, 'on', { charLevel: 5 })!, noModifiers);
 		expect(partDiceOf('force', 10)).toBe(1); // count-scaling: stays 1d10 (2nd beam = separate roll)
 	});
 
@@ -550,13 +572,14 @@ describe('CombatVM · effect lifecycle (EFX-4)', () => {
 		expect(character.play.effects.map((e) => e.iid)).toEqual(['mark']);
 	});
 
-	it('B19: hasTimedEffects is true only while a round-timed effect is active', () => {
+	it('B19: passing time is offered whether or not anything is ticking', () => {
+		// the bar used to appear and vanish with the player's buffs, which is a control they could not
+		// ask for. Passing time always moves the round counter, so it is never a no-op.
 		character.play.effects = [{ iid: 'x', label: 'X', effects: [], positive: false }];
-		expect(combat.hasTimedEffects).toBe(false); // indefinite only
-		character.play.effects = [
-			{ iid: 'y', label: 'Y', effects: [], positive: true, durationRounds: 5, startedRound: 0 },
-		];
-		expect(combat.hasTimedEffects).toBe(true);
+		character.play.round = 0;
+		combat.economy.advanceTime(10);
+		expect(character.play.round).toBe(10);
+		expect(character.play.effects.map((e) => e.iid)).toEqual(['x']); // indefinite, so untouched
 	});
 
 	it('an expiring cast_linked effect also ends its concentration', () => {
@@ -974,6 +997,71 @@ describe('CombatVM · S2 split net', () => {
 		const before = combat.journal.log.length;
 		combat.attackRoll(combat.attacks[0]!, noModifiers);
 		expect(combat.journal.log.length).toBe(before + 1);
+	});
+
+	it('a standard action rolls its check with the skill effects the skills panel uses', () => {
+		// the Hide action IS a Stealth check: one check must not roll two ways depending on which panel
+		// the player tapped it in (2014 exhaustion L1 rides `ability_checks`)
+		combat.effects.addEffect({
+			label: 'Exhausted',
+			tokens: ['disadvantage:ability_checks'],
+			positive: false,
+		});
+		const hide = combat.actions.find((a) => a.id === 'hide')!;
+		expect(hide.skill).toBe('stealth');
+		combat.actionClick(hide, noModifiers);
+		expect(combat.journal.log[0]!.advantage).toBe('disadvantage');
+	});
+
+	it('a bare ability check is folded and reachable: `d20_tests` lands on it, not only on the save', () => {
+		const plain = combat.sheet!.abilities.str;
+		expect(plain.check.value).toBe(plain.mod);
+		combat.effects.addEffect({
+			label: 'Exhausted (2024)',
+			tokens: ['flat_bonus:d20_tests-2'],
+			positive: false,
+		});
+		const a = combat.sheet!.abilities.str;
+		// the raw modifier is untouched (damage and DCs are built from it); the CHECK carries the penalty
+		expect(a.mod).toBe(plain.mod);
+		expect(a.check.value).toBe(plain.mod - 2);
+		expect(a.save.value).toBe(plain.save.value - 2);
+	});
+
+	it('the attack row prints the damage its own tap rolls (a scoped bonus lands on both)', () => {
+		character.play.round = 11;
+		// Rage's shape in the shipped packs: a damage bonus scoped to melee Strength attacks
+		combat.effects.addEffect({
+			label: 'Rage',
+			tokens: ['flat_bonus:damage.melee,str+2'],
+			positive: true,
+		});
+		const row = combat.attacks.find((a) => a.id === 'dagger')!;
+		combat.attackRoll(row, noModifiers);
+		const rolled = combat.journal.log[0]!.damage![0]!;
+		// the number on the row IS the number the roll used — the row was two lower before
+		expect(rolled.mod).toBe(row.damageParts[0]!.mod);
+		expect(attackNotes(row)).toContain('damage (Rage)');
+	});
+
+	it('Extra Attack: the strikes of one Attack action cost one Action between them', () => {
+		character.play.inCombat = true;
+		character.play.round = 9; // its own round (see the Savage Attacker test below)
+		combat.effects.addEffect({
+			label: 'Extra Attack',
+			tokens: ['set_override:attacks:2:floor'],
+			positive: true,
+		});
+		expect(combat.sheet!.attacksPerAction.value).toBe(2);
+		const before = combat.journal.log.length;
+		combat.attackRoll(combat.attacks[0]!, noModifiers);
+		combat.attackRoll(combat.attacks[0]!, noModifiers);
+		// both rolled, on ONE Action — the second strike rides the first's Attack action
+		expect(combat.journal.log.length).toBe(before + 2);
+		expect(character.play.turn.action).toBe(1);
+		// the third wants a second Action, and there is none
+		combat.attackRoll(combat.attacks[0]!, noModifiers);
+		expect(combat.journal.log.length).toBe(before + 2);
 	});
 
 	it('Savage Attacker rerolls the WEAPON dice and leaves an effect die alone', () => {
@@ -1865,6 +1953,32 @@ describe('PanelLayout · a saved layout is reconciled with the panels that exist
 		expect([...restored].sort()).toEqual([...shipped].sort());
 	});
 
+	it('moves a panel by keyboard, within a column and across to the other, and persists it', () => {
+		// the drag was the only way to arrange the screen; a keyboard user could not get back out of a
+		// layout they did not choose
+		const saved: string[][] = [];
+		const layout = new PanelLayout((cols) => saved.push(cols.flat()));
+		const ids = () => layout.columns.map((col) => col.map((p) => p.id));
+		const [first = [], second = []] = ids();
+		const [top = '', below = ''] = first;
+
+		layout.movePanel(top, PANEL_MOVE.down);
+		expect(ids()[0]?.slice(0, 2)).toEqual([below, top]);
+
+		layout.movePanel(top, PANEL_MOVE.right);
+		expect(ids()[0]).not.toContain(top);
+		expect(ids()[1]).toContain(top);
+		expect(ids()[1]?.length).toBe(second.length + 1);
+
+		// at an edge it is a no-op, not a wrap or a drop
+		const before = ids();
+		layout.movePanel(below, PANEL_MOVE.up);
+		layout.movePanel(below, PANEL_MOVE.left);
+		expect(ids()).toEqual(before);
+
+		expect(saved).toHaveLength(2); // each real move round-trips onto the character
+	});
+
 	it('leaves an up-to-date layout exactly as saved, order included', () => {
 		const layout = new PanelLayout();
 		// built from the SHIPPED set, reversed, so "up to date" stays true when a panel is added —
@@ -1916,9 +2030,16 @@ describe('CombatVM · an action that attacks (UBUG-11)', () => {
 		expect(combat.journal.log.length - before).toBe(2); // two strikes, two log entries
 		expect(character.play.turn.bonus).toBe(1); // ONE bonus action, not one per strike
 		expect(combat.resources.resourceSpent('focus')).toBe(1);
-		// numbered, so the log says WHICH strike each line was
-		expect(combat.journal.log[0]?.label).toMatch(/2\/2$/);
-		expect(combat.journal.log[1]?.label).toMatch(/1\/2$/);
+		// numbered, so the log says WHICH strike each line was — in throw order, like a volley's beams,
+		// because the two were recorded as ONE action
+		expect(combat.journal.log[0]?.label).toMatch(/1\/2$/);
+		expect(combat.journal.log[1]?.label).toMatch(/2\/2$/);
+		// one action, so one group — and each strike keeps an identity of its own, which is what an
+		// amendment matches on: sharing a millisecond made re-reading one rewrite both
+		const [a, b] = combat.journal.log;
+		expect(a?.group).toBeTruthy();
+		expect(b?.group).toBe(a?.group);
+		expect(a?.at).not.toBe(b?.at);
 	});
 
 	it('a weapon the character has not got is surfaced, not silently skipped', async () => {
@@ -2009,6 +2130,30 @@ describe('CombatVM · the death-save track belongs to being at 0 HP', () => {
 		expect(combat.hp.damageWasCrit).toBe(false);
 		// down again: the next ordinary hit costs ONE failure, not the stale crit's two
 		character.play.hp.current = 0;
+		combat.hpAmount = 3;
+		combat.damage();
+		expect(character.play.deathSaves.failures).toBe(1);
+	});
+
+	it('a long rest fills to the EFFECTIVE max, manual max and hp_max effect together (A14)', () => {
+		character.play.hp = { current: 5, max: 30, temp: 4 }; // a MANUAL max of 30
+		combat.effects.addEffect({
+			label: 'Aid',
+			tokens: ['flat_bonus:hp_max+5'],
+			positive: true,
+		});
+		expect(combat.hpMax).toBe(35); // what heal and the bar already use
+		combat.resources.rest('long');
+		expect(character.play.hp.current).toBe(35);
+		expect(character.play.hp.temp).toBe(0);
+	});
+
+	it('filling the third success pip by hand stabilises, like the rolled track does', () => {
+		character.play.hp = { current: 0, max: 20, temp: 0 };
+		character.play.deathSaves = { successes: 2, failures: 1 };
+		combat.toggleDeathSave('successes', 2); // the third pip
+		expect(character.play.deathSaves).toEqual({ successes: 0, failures: 0 });
+		// and a stable character's next hit starts the track over rather than continuing it
 		combat.hpAmount = 3;
 		combat.damage();
 		expect(character.play.deathSaves.failures).toBe(1);

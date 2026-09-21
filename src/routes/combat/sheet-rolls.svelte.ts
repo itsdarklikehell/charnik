@@ -177,7 +177,7 @@ export class SheetRolls {
 	 *  rolls the to-hit (picks up attack advantage/flat/dice effects) THEN the weapon damage (with
 	 *  `damage`-keyed effects — Rage +2, sneak/hemocraft dice); Shift-click opens the roll tray. */
 	attackRoll = (at: Attack, e: Event) => {
-		if (!this.host().economy.trySpend('action')) return;
+		if (!this.host().economy.trySpendStrike()) return;
 		const { fx, parts, hasDmg } = this.attackSpec(at);
 		if (wantsTray(e)) {
 			// tray on the TO-HIT (pick advantage), then Roll fires the damage as one combined entry
@@ -186,7 +186,7 @@ export class SheetRolls {
 					...nameFields(attackRollName(at, t)),
 					test: {
 						dice: { 20: 1 },
-						mod: at.toHit + fx.flat,
+						mod: at.toHit,
 						advantage: netAdvantage(fx),
 						bonusDice: fx.bonusDice,
 						mods: dieModsOf(fx),
@@ -204,24 +204,41 @@ export class SheetRolls {
 	/**
 	 * Roll one attack instantly, charging NOTHING: no turn slot, no tray. What an action that makes
 	 * attacks calls (UBUG-11) — a Flurry of Blows already paid one bonus action for the pair, so each
-	 * strike inside it must not try to pay again. `label` distinguishes the strikes in the log.
+	 * strike inside it must not try to pay again. `name` distinguishes the strikes in the log.
 	 */
 	rollAttackNow = (at: Attack, name: RollName = attackRollName(at, t)) => {
+		this.rollAttacks(at, [name]);
+	};
+
+	/**
+	 * Roll N strikes of ONE attack as one action (a Flurry of Blows' pair, Extra Attack): each strike is
+	 * its own throw and its own log line, recorded TOGETHER so they share a `group`, get distinct `at`
+	 * stamps and toast as a single card — which is what `actionRuns` reads the run back from.
+	 *
+	 * The stamps are the load-bearing half: `at` is the identity an amendment matches on, and two
+	 * strikes made in the same millisecond shared it, so re-reading one rewrote both and only one line
+	 * on disk.
+	 */
+	rollAttacks = (at: Attack, names: RollName[]) => {
 		const { parts, fx, hasDmg } = this.attackSpec(at);
-		// instant: to-hit (with effect advantage/flat/dice) + per-type damage → one combined entry
-		const toHit = rollPool(
-			{ 20: 1 },
-			{ ...fx, mod: at.toHit + fx.flat, advantage: netAdvantage(fx) },
+		const stamp = Date.now();
+		// instant: to-hit (with effect advantage/flat/dice) + per-type damage → one combined entry each
+		const entries = names.map((name, i) =>
+			this.host().journal.entryFor(
+				name,
+				rollPool({ 20: 1 }, { ...fx, mod: at.toHit, advantage: netAdvantage(fx) }),
+				{ at: stamp + i, ...(hasDmg ? { damage: rollDamageParts(parts) } : {}) },
+			),
 		);
-		const dmgRolls = hasDmg ? rollDamageParts(parts) : undefined;
+		this.host().journal.recordRolls(entries);
 		// N2 Savage Attacker: does THIS weapon damage qualify for a reroll? The offer itself is not
 		// attached to the toast — a toast expires mid-decision, so it announces and the always-visible
 		// Playbar (and the log, forever) carries the control, as the ↻ on the damage pill it rerolls.
-		// (The Shift-click tray path arms the same offer, from `recordTrayRolls`.)
-		const savage = this.savageOffer(parts[0], dmgRolls);
-		const entry = this.host().journal.pushRoll(name, toHit, dmgRolls);
-		if (savage && entry.at !== undefined)
-			this.savagePending = { spec: savage.spec, roll: savage.roll, at: entry.at };
+		// A multi-strike action arms on its FIRST strike, like a volley through the tray does.
+		const first = entries[0];
+		const savage = this.savageOffer(parts[0], first?.damage);
+		if (savage && first?.at !== undefined)
+			this.savagePending = { spec: savage.spec, roll: savage.roll, at: first.at };
 	};
 
 	/**
@@ -254,9 +271,13 @@ export class SheetRolls {
 		const masteryDice = (at as Attack & { masteryDice?: BonusDie[] }).masteryDice ?? [];
 		// Damage effects (Bless-style flat/dice, reroll/min_die) fold onto the PRIMARY part only — RAW
 		// adds them to the weapon's base damage, not to a second damage type's dice.
+		// The FLAT halves of both axes are already in the row (`computeAttacks` folds them where the
+		// weapon is known), so picking them up here would count them twice — and it is why the row can
+		// print the number the tap rolls. What only a roll can carry rides on: bonus dice and the
+		// die manipulations, folded onto the PRIMARY part, as RAW adds them to the weapon's base damage.
 		const parts: DamagePartSpec[] = at.damageParts.map((p, i) => ({
 			dice: p.pool,
-			mod: p.mod + (i === 0 ? dmgFx.flat : 0),
+			mod: p.mod,
 			type: p.type,
 			...(i === 0
 				? {

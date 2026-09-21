@@ -520,9 +520,9 @@ plugin-dependency notification view + portability / version awareness (fresh-eye
 - [x] **UBUG-13 · Level-up re-offered an ASI and double-applied it.** Root cause worth remembering:
   only the FLATTENED `abilityBoosts`/`feats` were persisted, never the per-slot mapping, so a
   restored slot could re-derive its boost a second time.
-  - [ ] The re-PICK half is still open (`docs/audit-sep-09.md` finding 87): the reconciliation
-    subtracts per ability against the LIVE slots, so moving a saved ASI to another ability grants
-    both, swapping it for a feat keeps its `+2`, and each re-pick compounds into the save.
+  The re-PICK half has the same root: the reconciliation subtracts what the SAVE's own picks granted
+  (`EditContext.loaded`), never what the live ones grant — measured against the live picks, moving a
+  saved ASI to another ability left the old one with nothing to cancel against.
 - [x] **UBUG-14 · A long rest clears one level of Exhaustion.** SRD-verified; the 2024 text's "has
   also ingested some food and drink" applies unconditionally because rations are not modelled.
 - [x] **UBUG-15 · Death is modelled, and there is a dead screen.** One typed `play.death: {cause}`
@@ -611,3 +611,33 @@ plugin-dependency notification view + portability / version awareness (fresh-eye
   row does exactly that).
   Remaining: **`grant_slot:<level>`** — Mystic Arcanum puts an extra SLOT into the pools rather than a
   resource, and no token says that. One consumer, so it waits for a second.
+
+- [x] **PLAYTEST-SHIELD · a wielded shield is worth +2 AC, and the sheet said 0.** `deriveAc`
+  (`character/derive-stats.ts`) takes the shield's +2 from `character.play.shieldRaised` — a combat
+  toggle — and its own comment says that flag is "the single source for it, not the inventory equipped
+  flag". So equipping a shield in the builder changes no number, which is what the playtest reported
+  and what RAW disagrees with: 5e has no "raise your shield" action, a shield you wield gives +2 while
+  you wield it. The play toggle is not wrong to EXIST (a shield can be stowed mid-fight, and the app
+  cannot know), but it should default from what is equipped rather than be the only source. Nothing in
+  `docs/internals/` settled this, so it was an implementation shortcut and not a closed decision.
+  **Done, by deleting the flag rather than defaulting it.** A shield in hand IS inventory state, so
+  `play.shieldRaised` is gone and `deriveAc` reads the equipped shield — at the AC its own row
+  declares, which makes a +1 shield worth 3 and a row with no `ac` tag worth nothing, the same rule
+  armour already followed. The Combat toolbar's Shield toggle is now that row's equip button under
+  another name, and it is absent for a character carrying no shield, where it used to offer a phantom
+  +2. Old saves keep parsing: zod strips the dropped key.
+
+- [ ] **PLAYTEST-SPECIES-GRANTS · a species can give an ability boost and nothing else.**
+  `species.boost_choice` already encodes "+N to M abilities of your choice" (`schemas.ts`, 5e
+  Half-Elf). Two things beside it have no column and no token: a species that grants a **feat** — and
+  the feat must be a CHOICE where more than one is legal, not a fixed one — and a species that grants
+  a **skill proficiency of the player's choice** (feats have `skill_choices`; species do not). Until
+  both exist, a whole shape of species is unauthorable even as someone's own homebrew.
+  **We do not write the rows.** The species that makes this famous is PHB, in no SRD, and there is no
+  CC-BY source for it — so this item is the VOCABULARY only, and whoever wants that species writes it
+  in their own pack (`AGENTS.md` ▸ Inventing game data).
+  **An optional rule is a CHOICE at the point of the trait, not a settings shelf.** Settled with the
+  maintainer: a variant trait is an ordinary content row that declares which trait it stands in for,
+  and the builder offers the two side by side where that trait is granted — the usual one and the
+  homebrew/variant. No global toggle, nothing to enable before building, and a pack someone installs
+  brings its variants with it.

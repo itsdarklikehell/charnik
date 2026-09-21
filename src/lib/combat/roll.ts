@@ -22,6 +22,7 @@ import { matchesTarget, type EffectFacts } from '$lib/effects/apply';
 import { sayText, type Said, type SaidText, type SaidValue } from '$lib/util/say';
 import type { Translate } from '$lib/i18n';
 import type { RollMod } from '$lib/effects/facts';
+import type { CharacterSheet, SkillId } from '$lib/character/derive';
 
 /** A rolled damage slice carrying its damage type ("slashing", "radiant"). A single-type hit is one
  *  of these; a multi-type weapon rolls several, each shown separately with its own total (BUG-DMG-1). */
@@ -46,9 +47,13 @@ export interface DamagePartSpec {
 /** Does this set of parts actually deal damage? "Has a part" is NOT the question: `parseDamageParts`
  *  always yields at least one, falling back to an empty `{pool:{}, mod:0, type:''}` placeholder for a
  *  weapon with no damage line. Nor is "has dice" — Unarmed Strike's "1 + STR mod" is entirely FLAT,
- *  and gating on dice alone dropped it from the roll and the toast altogether. Dice OR a flat value. */
+ *  and gating on dice alone dropped it from the roll and the toast altogether. Dice, a flat value, or
+ *  EFFECT dice: it is asked after the effects fold in, so a `+1d6` rider on a weapon whose own damage
+ *  folds to zero is damage exactly as a flat `+1` from the same place is. */
 export const dealsDamage = (parts: DamagePartSpec[]): boolean =>
-	parts.some((p) => Object.keys(p.dice).length > 0 || p.mod !== 0);
+	parts.some(
+		(p) => Object.keys(p.dice).length > 0 || p.mod !== 0 || (p.bonusDice?.length ?? 0) > 0,
+	);
 
 /** Roll each damage part into a `TypedRoll`, preserving order (primary part first). Pure — the rng is
  *  injectable for tests; each part carries its own type through so the tray can show the breakdown. */
@@ -311,10 +316,14 @@ export const withoutLegacyAmendment = (note: string | undefined): string =>
  * making the total quietly smaller (docs/internals/roller.md ▸ Conventions).
  */
 export function rollFormulaEntry(label: string, formula: string, rng?: Rng): RollLogEntry {
-	const { dice, mod, issues } = parseFormula(formula);
+	const { dice, mod, bonusDice, issues } = parseFormula(formula);
 	return {
 		label,
-		...rollPool(dice, { mod, ...(rng ? { rng } : {}) }),
+		...rollPool(dice, {
+			mod,
+			...(bonusDice.length ? { bonusDice } : {}),
+			...(rng ? { rng } : {}),
+		}),
 		...(issues.length
 			? { noteParts: [{ key: NOTE_KEY.formulaUnread, values: { fragments: { list: issues } } }] }
 			: {}),
@@ -407,6 +416,25 @@ export function rollEffectsFor(facts: EffectFacts, key: string, scopes?: Set<str
 		if (matchesTarget(m.target, key) && scopeOk(m)) out.minDie = Math.max(out.minDie ?? 0, m.value);
 	return out;
 }
+
+/** What a skill check rolls AS: its effect key plus the scopes that narrow which effects apply.
+ *  `proficient` here means "this check adds your proficiency bonus" — RAW's own wording for Reliable
+ *  Talent — so expertise carries it and Jack of All Trades' partial rung does not (2024 says "uses one
+ *  of your skill proficiencies", which an untrained skill is not).
+ *
+ *  Shared, because a Stealth check is the same check whether the player taps it in the skills panel or
+ *  takes the Hide action: two call sites building this by hand is how one of them rolled with no
+ *  effects at all. */
+export const skillRollTarget = (
+	skill: SkillId,
+	sheet: CharacterSheet | null,
+): { key: string; scopes: Set<string> } => {
+	const prof = sheet?.skills[skill]?.prof;
+	return {
+		key: `skill.${skill}`,
+		scopes: new Set(prof === 'proficient' || prof === 'expertise' ? ['proficient'] : []),
+	};
+};
 
 /** Just the roll-MANIPULATION half of a `RollEffects` — the `DieMods` a die carries. `RollEffects`
  *  extends `DieMods`, so passing the whole thing where `DieMods` is asked for type-checks while

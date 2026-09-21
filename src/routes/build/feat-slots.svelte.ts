@@ -21,8 +21,12 @@ import type { AsiShape } from './draft';
  *  than re-described, so the two cannot drift apart. `import type` is erased, so no runtime cycle. */
 export type FeatsHost = Pick<
 	BuildVM,
-	'draft' | 'graph' | 'featList' | 'backgroundRow' | 'skillPicks' | 'row'
->;
+	'draft' | 'graph' | 'featList' | 'backgroundRow' | 'row'
+> & {
+	/** Named structurally, not picked: `SkillPicksHost` names `feats` and two Picks that name each
+	 *  other off the same class are a circular mapped type. This is the one member asked for here. */
+	skillPicks: { isProficientBeforeFeats(skill: string): boolean };
+};
 
 export class FeatSlots {
 	/* The host arrives as an ACCESSOR, not an object: a $derived field initialiser runs before a
@@ -100,10 +104,15 @@ export class FeatSlots {
 			delete asi[key];
 			this.host().draft.slotAsi = asi;
 		}
-		// a half-feat defaults its +1 to the first offered ability; a non-half-feat clears any choice
-		const first = this.halfFeatOptionsFor(key)[0];
+		// a half-feat defaults its +1 to the first offered ability; a non-half-feat clears any choice.
+		// A swap KEEPS a choice the new feat still offers and drops one it does not — the same kind of
+		// staleness §C clears below, and a kept ability the new feat never offered is silently ignored
+		// by every reader of it.
+		const options = this.halfFeatOptionsFor(key);
+		const first = options[0];
 		const featAb = { ...this.host().draft.slotFeatAbility };
-		if (first) featAb[key] ??= first;
+		const kept = featAb[key];
+		if (first) featAb[key] = kept && options.includes(kept) ? kept : first;
 		else delete featAb[key];
 		this.host().draft.slotFeatAbility = featAb;
 		// §C: a feat swap clears the slot's skill choice-grant picks (stale for the new feat)
@@ -111,14 +120,14 @@ export class FeatSlots {
 		delete featSk[key];
 		this.host().draft.slotFeatSkills = featSk;
 	};
-	/** The abilities a choice-key's feat lets you raise by +1 (a half-feat like Grappler / an Epic
-	 *  Boon), or `[]` if it holds no half-feat. Reads the feat row's `ability_choice`. */
-	halfFeatOptionsFor = (key: string): Ability[] => {
-		const ref = this.featRefFor(key);
+	/** The abilities a FEAT lets you raise by +1 (a half-feat like Grappler / an Epic Boon), or `[]` if
+	 *  it is not one. Reads the feat row's `ability_choice`. Keyed by ref as well as by slot, because
+	 *  the edit residue asks what the feat the SAVE held offered, not the one the slot holds now. */
+	halfFeatOptionsOf = (ref: string | null): Ability[] => {
 		if (!ref || ref === ASI) return [];
-		const feat = rowOfType(this.host().graph?.get(ref), 'feat');
-		return halfFeatAbilities(feat?.data.ability_choice);
+		return halfFeatAbilities(rowOfType(this.host().graph?.get(ref), 'feat')?.data.ability_choice);
 	};
+	halfFeatOptionsFor = (key: string): Ability[] => this.halfFeatOptionsOf(this.featRefFor(key));
 	setSlotFeatAbility = (key: string, ab: Ability) => {
 		this.host().draft.slotFeatAbility = { ...this.host().draft.slotFeatAbility, [key]: ab };
 	};
@@ -145,7 +154,7 @@ export class FeatSlots {
 	/** Strict-mode guard: a skill already proficient from ANOTHER source (class/background pick or a
 	 *  different feat's grant) is a wasted pick — disable it in Strict, allow it in Free. */
 	featSkillTakenElsewhere = (key: string, skill: string): boolean => {
-		if (this.host().skillPicks.isProficient(skill)) return true;
+		if (this.host().skillPicks.isProficientBeforeFeats(skill)) return true;
 		return Object.entries(this.host().draft.slotFeatSkills).some(
 			([k, list]) => k !== key && list.includes(skill)
 		);

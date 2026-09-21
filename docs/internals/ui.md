@@ -69,7 +69,10 @@ custom theme, and Charnik ships user-authored themes (Settings ▸ Themes → ru
 
 A genuinely new shade is a **semantic** token added to *both* theme blocks (`:root` dark and
 `[data-theme='light']`). Alpha tints are `color-mix(in srgb, var(--token) N%, transparent)`, which
-themes for free. The stylelint `color-no-hex` guard enforces the colour half; sizes are on you.
+themes for free. Stylelint holds three of the lines itself — `color-no-hex`, and a px ban on
+`font-size` and on `border-radius` — so a literal size is caught where it is typed rather than in a
+census later. A `%` radius is geometry, not a size: `50%` is how a circle is spelled and stays.
+Everything else is on you.
 
 **A box side is logical, never physical:** `margin-inline-start`, `padding-inline-end`,
 `border-inline-start`, `text-align: start`. A physical side stays put when the UI is mirrored, and
@@ -92,6 +95,31 @@ class app-wide, so a common name collides with scoped classes that reuse it for 
 Hoisting a `.field` input base once bled onto `.field` form-row wrappers across three views. Pick
 specific names for global utilities (`.text-field`, `.dialog-card`, never `.field` / `.row` /
 `.item`), and keep exact values when migrating so the pixel diff stays at zero.
+
+## A narrow window
+
+A phone, or a desktop window dragged small — the same thing, and `MobileWarning` says out loud that
+it is alpha. The app has ONE narrow threshold, **800px**, shared by the root layout's rules and that
+banner, so the warning and the rules that make it survivable agree on where narrow starts. A view
+whose own floor is higher names its own width instead (the combat stat grid and the settings tab
+strip both at 640px): that number is a fact about the box's min-content, never about a device.
+
+- **`main` is the only scroll region, so everything above it must FIT.** Horizontal overflow at the
+  document level scrolls the page sideways and drags every `position: fixed` overlay off-side with
+  it. The topbar therefore wraps below the threshold — nav on a row of its own, a labelled control
+  collapsed to its icon. Collapsing keeps the `aria-label` and never removes the control: the bug
+  chip is the only entrance to the diagnostics bundle.
+- **Chrome wraps; a status strip scrolls.** A `.combat-bar` never becomes two rows (see its own note
+  in `components.css`), so when it runs out of room it scrolls sideways. Same for the settings tab
+  strip, whose active underline belongs on the strip's own border and not floating mid-panel.
+- **A grid track is `minmax(0, 1fr)`, never a bare `1fr`.** A bare one floors at the track's
+  min-content, so the widest card in it sets a width the viewport may not have — which is how the
+  whole build sheet ran sideways at 320px.
+- **A locale is where a row stops fitting.** Ukrainian labels run wider than English, so a header
+  that pairs a translated title with a `nowrap` button wraps rather than waiting for a threshold.
+
+**Verified by `tools/visual/narrow.mjs`**, not by `shot.mjs` — that one renders at 1280 only. See
+`tooling.md` ▸ Visual regression.
 
 ## The UX pattern contract
 
@@ -121,8 +149,12 @@ good", so they are pinned here and every component follows them.
 7. **Resource, slot, and economy pips are click-to-set**: clicking a filled pip empties it and every
    pip after it; clicking an empty one fills it and every pip before it. Available on the left, spent
    on the right.
-8. **A panel header is** a collapse chevron, the title, right-aligned actions, and a drag handle.
-   Panels collapse, hide, and drag-reorder **within the two-column area only** — never a free canvas.
+8. **A panel header is** a collapse chevron, the title, right-aligned actions, and a move handle.
+   Panels collapse, hide, and reorder **within the two-column area only** — never a free canvas. The
+   handle is a real `<button>` in the tab order: dragging it reorders, and so do the arrow keys —
+   up/down inside the column, left/right across to the other one (`PanelLayout.movePanel`), with the
+   caret put back on the handle afterwards because svelte-dnd-action rebuilds the column's nodes. A
+   reorder that only a pointer can perform is a layout a keyboard user cannot get back out of.
 9. **An icon slot takes an emoji or an image.** The SRD ships no art, so the fallback is a glyph;
    homebrew and user-created entities may set an image.
 
@@ -145,6 +177,19 @@ good", so they are pinned here and every component follows them.
     `SkillRows` puts the proficiency dot before the name and `×2` expertise after it. "Taken" in a
     builder picker is the row's own state, so it goes left. Gold means taken/proficient/prepared
     everywhere, so a new control reuses it rather than inventing a colour.
+
+12. **A row that carries controls is a `<div>`, never a `<button>`.** The row's own action goes on an
+    element INSIDE it — the name is the usual one — and every accessory beside it is a real
+    `<button>`. Interactive content nested in a `<button>` is invalid HTML, and the browser gives the
+    outer element the tab stop and swallows every inner one: that is how a spell row's prepare, pin,
+    ritual-cast and cast-time controls ended up mouse-only, and how a resource-borne effect could be
+    added and not removed without a mouse. A `role="button"` span with `tabindex="-1"` and a keydown
+    handler is the same bug wearing a hat — the handler cannot fire on an element the keyboard cannot
+    reach. Real buttons also delete the `svelte-ignore` above them and the `stopPropagation` inside
+    them, since there is no outer click to stop. A searched LIST is the other shape, and it is the
+    command palette's: the caret stays in the search box, `walkOptions` (`lib/util/option-walk.ts`)
+    moves a highlight the box names through `aria-activedescendant`, and Enter does what a click on
+    the highlighted row does — `EntryList` and both builder pickers share that one implementation.
 
 The Combat view is the reference implementation. Reuse the existing primitives (`Switch`,
 `EyeToggle`, `RollButton`, `DialogShell`) — grep `surface.md` before building another one.
@@ -209,11 +254,15 @@ sub-choices in as `extra` rather than rebuilding the grid. `LanguagesPane` is th
 the same walk over a multi-select chip list. The pane itself is not a scroll container; which element
 is depends on the target, and `Inspector.bodyScrolls` decides.
 
-**The caret stays in the search box.** An option is a real button, so it can be tabbed to — and a
+**The caret stays in the search box** — and gets there on its own. `PickerSearch` focuses itself when
+a picker opens, and `Inspector` hands focus back to whatever opened it when the pane closes: the pane
+is the last column in the DOM, so without those two the walk this whole contract describes was 89 Tab
+stops away from the card that started it. An option is a real button, so it can be tabbed to — and a
 walk started from there hands focus back to the search box rather than leaving a ring on one option
 while Enter takes another. That is why the search box is a `searchbox` naming the highlight through
 `aria-activedescendant`: with focus that never moves, it is the only thing a screen reader has to go
-on. Enter is the search box's to interpret; on a focused option the browser's own Enter is right.
+on. Enter is the search box's to interpret; on a focused option the browser's own Enter is right —
+which is why `fromOptions` drops `onenter` before delegating, rather than merely not supplying one.
 
 **Not a `combobox`, and the big list is not a `listbox`.** APG's combobox is single-select with
 selection following focus; these walks are multi-select and deliberately commit nothing, so the role
@@ -305,8 +354,11 @@ Copies drift. The language switch is `LangSwitcher.svelte`, used by the topbar a
 **Every full-screen dialog, modal, or banner carries `LangSwitcher` in its top-right corner. No
 exceptions.** It can appear before the user has reached the topbar switch, or while covering it, so
 it may be the only text on screen — someone who cannot read the current locale must still be able to
-change it. `DialogShell` bakes it in (`.dialog-lang-corner`); a bespoke full-screen component adds it
-by hand.
+change it. A backdrop is also a DISMISS target, so while a dialog is open reaching for the topbar's
+switcher cancels the question. `DialogShell` bakes it in (`.dialog-lang-corner`); a bespoke
+full-screen component adds it by hand, and `components/dialog-lang-switcher.test.ts` holds the line —
+five dialogs built from the house template missed this clause equally, which is what a rule enforced
+only by memory costs.
 
 The **house dialog shape**, which every attention dialog bakes from: a centered modal on a dim
 backdrop; a round badge header with the title, an optional count pill ("1 of 2"), and one muted

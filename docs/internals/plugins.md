@@ -243,8 +243,10 @@ All three keys optional; an empty object is a valid "nothing applies" answer.
   `override` layer are host-reserved in `api: 1`); `op` ∈ `add | set | mult`; `amount` must
   be finite, `|amount| ≤ 1000`; `label` ≤ 48 chars. The host prefixes every label with your
   `namespace` in the provenance trace — a plugin cannot masquerade as core math. An `op: "set"` folds
-  exactly like a content `set_override` (at the override stage, most-potent-wins across all
-  sets); `add`/`mult` fold at your declared layer.
+  exactly like a content `set_override`: at YOUR declared layer (D12 — a set is no longer forced to
+  `override`), most-potent-wins among the sets of that one layer, and a set in a later layer of
+  `LAYER_SEQUENCE` then replaces whatever an earlier layer settled on. `add`/`mult` fold at your
+  declared layer too.
 - **`notes`** — plain-text explanations for the stat tooltip / effects panel. Rendered as
   plain text ONLY (no markdown, no links), ≤ 200 chars each.
 
@@ -279,10 +281,15 @@ the group `d20_tests` (fans out to every d20 roll — saves, checks/skills, atta
 The group keys `saves` / `skills` are valid in TOKENS (they fan out), not as contribution keys.
 A known-kind token whose target is outside this closed set is kept inert AND surfaced in
 content-health (`unknown target "<t>" for <kind>`), not silently dropped (AUDIT B13).
-`skill.<id>` is validated by GRAMMAR (a snake-case id), not by membership in the 18 — an unknown
-id is accepted and folds onto nothing (the same harmless no-op as a typo'd content target);
-prototype-pollution keys die on the grammar + the ≤20-key cap, and folding never indexes an
+`skill.<id>` and `passive.<id>` are validated by GRAMMAR (a snake-case id), not by membership in the
+18 — an unknown id is accepted and folds onto nothing (the same harmless no-op as a typo'd content
+target); prototype-pollution keys die on the grammar + the ≤20-key cap, and folding never indexes an
 object by these keys.
+
+The host asks `isPluginContributionTarget` (`character/derive-targets.ts`), which answers off the
+same `NUMERIC_TARGETS` the derive folds by, minus the group aliases above. There is no second list:
+the plugin host used to carry its own regex copy of this paragraph, and the copy drifted — eight of
+the keys documented here were rejected, and a rejected key takes the whole result down with it.
 
 ## 5. Execution model: what your code runs inside
 
@@ -339,8 +346,11 @@ object by these keys.
    user consented to cannot be swapped afterwards — which is why provenance needs no new field.
 4. **Kill switch:** a global "disable all plugins" toggle exists and always works.
 5. **Desktop only.** Plugins run on the Tauri desktop build. The web demo (GitHub Pages) has no
-   plugin discovery and does not bundle the QuickJS runtime — so the "consent outside the dataDir"
-   requirement has no web edge case, and the sandbox attack surface never exists on the public URL.
+   plugin discovery and never LOADS the QuickJS runtime — `loadPlugins` returns at the platform check,
+   so the sandbox never exists on the public URL and the "consent outside the dataDir" requirement has
+   no web edge case. The runtime is still *shipped*: the sandbox is a dynamic `import()`, which makes
+   it a lazy chunk rather than an excluded one, so ~528 KB of WASM is deployed to Pages and never
+   fetched. Excluding it needs a build-mode stub for `plugin-sandbox`, which nothing has asked for.
 
 ## 7. Compatibility contract (what WE promise)
 

@@ -10,7 +10,7 @@
 	import DiceTray from './menus/DiceTray.svelte';
 	import RollLog from './menus/RollLog.svelte';
 	import { SKILL_ABILITY, type SkillId } from '$lib/character/derive';
-	import { titleCase, ABIL, MOD_TARGETS, modTargetKey } from '$lib/combat/helpers';
+	import { titleCase, ABIL, MOD_TARGETS, modTargetKey, conditionIdOf } from '$lib/combat/helpers';
 	import { sanitizeHtml } from '$lib/content/markdown';
 	import Switch from '$lib/components/Switch.svelte';
 	import { COINS } from '$lib/rules/currency';
@@ -23,6 +23,16 @@
 	const character = $derived(combat.character);
 	const { setTempHp, addCustomModifier, togglePassive } = combat;
 	const { addEffect } = combat.effects;
+
+	/** The add-effect menu's own filter. The catalog is user-extendable content, so the box beside it
+	 *  is the only way the list stays navigable at size — it used to search nothing at all. */
+	let effectQuery = $state('');
+	const matchingEffects = $derived.by(() => {
+		const q = effectQuery.trim().toLowerCase();
+		return q
+			? combat.effects.effectCatalog.filter((p) => p.label.toLowerCase().includes(q))
+			: combat.effects.effectCatalog;
+	});
 
 	let popEl = $state<HTMLDivElement>();
 	let pos = $state<{ top: number; left: number | null; right: number | null }>({
@@ -43,13 +53,18 @@
 	function place(clamp: boolean): void {
 		if (!overlay || !popEl) return;
 		const margin = 8;
+		const viewportWidth = document.documentElement.clientWidth;
 		const r = overlay.anchor?.getBoundingClientRect();
 		// which EDGE it hangs from was decided when it opened; only the measurement is redone
-		const left = r && overlay.left != null ? r.left : overlay.left;
-		const right =
-			r && overlay.right != null ? document.documentElement.clientWidth - r.right : overlay.right;
+		let left = r && overlay.left != null ? r.left : overlay.left;
+		let right = r && overlay.right != null ? viewportWidth - r.right : overlay.right;
 		let top = r ? r.bottom + 6 : overlay.top;
 		if (clamp) {
+			// the same reasoning on the other axis: the menu is 300px wide, so a button anywhere near an
+			// edge hangs it off the screen — which a phone viewport hits with almost every button
+			const furthest = viewportWidth - margin - popEl.offsetWidth;
+			if (left != null) left = Math.max(margin, Math.min(left, furthest));
+			if (right != null) right = Math.max(margin, Math.min(right, furthest));
 			if (top + popEl.offsetHeight > window.innerHeight - margin)
 				top = window.innerHeight - margin - popEl.offsetHeight;
 			if (top < margin) top = margin;
@@ -79,10 +94,16 @@
 			if (popEl?.contains(t) || overlay.anchor?.contains(t)) return;
 			combat.overlay = null;
 		};
+		// The first place() measures a menu whose body has not laid out yet, so the clamp above ran
+		// against a height of nothing and a tall menu still hung off the bottom. The same observer
+		// covers a menu that RESIZES while open — the add-effect list shortens as its filter narrows.
+		const refit = new ResizeObserver(reflow);
+		refit.observe(popEl);
 		window.addEventListener('scroll', follow, true);
 		window.addEventListener('resize', reflow);
 		window.addEventListener('pointerdown', closeOnOutside, true);
 		return () => {
+			refit.disconnect();
 			window.removeEventListener('scroll', follow, true);
 			window.removeEventListener('resize', reflow);
 			window.removeEventListener('pointerdown', closeOnOutside, true);
@@ -117,6 +138,7 @@
 			<div class="search">
 				<span class="search-icon"><Icon name="search" size={13} /></span><input
 					placeholder={$_('combat.menu.searchEffects')}
+					bind:value={effectQuery}
 				/>
 			</div>
 			<div class="section eyebrow">{$_('combat.menu.durationApplied')}</div>
@@ -152,7 +174,7 @@
 				>
 			</div>
 			<div class="section eyebrow">{$_('combat.menu.catalog')}</div>
-			{#each combat.effects.effectCatalog as p (p.label)}
+			{#each matchingEffects as p (p.label)}
 				{@const dur = p.durationRounds ?? combat.effects.newEffectDuration}
 				<button
 					class="menu-row"
@@ -302,7 +324,9 @@
 								<button class="menu-row" onclick={() => togglePassive(skill)}>
 									<span class="passive-eye" class:on={passiveSkills.includes(skill)}
 										><EyeIcon on={passiveSkills.includes(skill)} /></span
-									><span class="skill-name">{titleCase(skill)}</span>
+									><span class="skill-name"
+										>{$_(`skillName.${skill}`, { default: titleCase(skill) })}</span
+									>
 								</button>
 							{/each}
 						</div>
@@ -398,19 +422,23 @@
 				>
 			</div>
 			{#each conditionList as cn (cn.id)}
-				{@const added = character?.play.effects.some((e) => e.label === cn.label)}
+				<!-- matched by the TOKEN it carries, not by its label: the label is content and a
+				     translated pack would stop the switch recognising its own condition -->
+				{@const applied = character?.play.effects.find((e) => conditionIdOf(e) === cn.id)}
 				<button
 					class="menu-row"
+					aria-pressed={!!applied}
 					onclick={() =>
-						added
-							? null
+						applied
+							? combat.effects.removeEffect(applied.iid)
 							: addEffect({
 									label: cn.label,
 									tokens: [`apply_condition:${cn.id}`],
 									positive: false,
 								})}
 				>
-					<span class="main">{cn.label}</span><span class="toggle-track" class:on={added}></span>
+					<span class="main">{cn.label}</span><span class="toggle-track" class:on={!!applied}
+					></span>
 				</button>
 			{/each}
 		{/if}
@@ -427,21 +455,22 @@
 		z-index: 51;
 		background: var(--color-surface);
 		border: 1px solid var(--color-border-strong);
-		border-radius: 13px;
+		border-radius: var(--radius-lg);
 		box-shadow: 0 18px 40px var(--color-overlay);
 		padding-bottom: var(--space-1-5);
 	}
-	/* the roll log's row is four columns wide (dice · to hit · damage · total) and does not fit the
-	   menu width — at 300px the d20 pair wrapped, which drew as a two-line blob. The row is the fixed
-	   thing here (it is the same RollRow everywhere); the menu is what gives. */
+	/* the roll log's row does not fit the menu width — at 300px the d20 pair wrapped, which drew as a
+	   two-line blob. The row is the fixed thing here (it is the same RollRow everywhere); the menu is
+	   what gives, and it gives more since a roll became two labelled boxes: at 360px a crit's pool
+	   started folding into a four-wide column of dice. */
 	.popup.wide {
-		width: min(360px, calc(100vw - 1.5rem));
+		width: min(440px, calc(100vw - 1.5rem));
 	}
 	/* the roller is a two-line tray with a header of dice buttons — at 300px the header wrapped onto
 	   three rows and a damage line with two types had nowhere to go. Same reasoning as the log above:
 	   the content is the fixed thing, the menu is what gives. */
 	.popup.dice-tray {
-		width: min(460px, calc(100vw - 1.5rem));
+		width: min(560px, calc(100vw - 1.5rem));
 		/* the tray is two CARDS with a gap between them, each carrying its own edge and shadow — so the
 		   dropdown behind them draws nothing, or the gap would show a third surface through it. It keeps
 		   its padding, though: this box still scrolls, so a shadow cast outside it is a shadow clipped

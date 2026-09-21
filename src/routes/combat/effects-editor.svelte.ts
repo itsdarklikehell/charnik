@@ -6,9 +6,17 @@
  * condition IS an effect of kind `apply_condition`, so ONE list is the source of truth for what is
  * currently modifying the character (docs/plan.md, roadmap 9). That is why they are one module.
  */
-import type { Character, DeathCause } from '$lib/character/schema';
+import {
+	EXHAUSTION_MAX,
+	type Character,
+	type DeathCause,
+	type EffectInstance,
+} from '$lib/character/schema';
 import type { ContentGraph } from '$lib/content/loader';
+import { localizedName, localizedProse } from '$lib/content/detail';
+import { app } from '$lib/stores/app.svelte';
 import { endConcentrationCarriedBy, remainingRounds, type MenuKind } from '$lib/combat/helpers';
+import { conditionIdOf } from '$lib/combat/effects-view';
 
 /** What the effects editor needs from the sheet around it. */
 export interface EffectsHost {
@@ -35,7 +43,7 @@ export class EffectsEditor {
 				// leveled conditions (exhaustion, max_level>1) are a stepper, not a binary toggle — they
 				// don't belong in this multi-select (they'd double-count with gatherExhaustion). D19.
 				.filter((r) => Number(r.data.max_level ?? 1) <= 1)
-				.map((r) => ({ id: r.id, label: r.data.name_en }))
+				.map((r) => ({ id: r.id, label: localizedName(r, app.activeLocale) }))
 		);
 	});
 	/** The exhaustion ladder height for this character's system (0 = no exhaustion row loaded → the
@@ -54,7 +62,9 @@ export class EffectsEditor {
 	setExhaustion = (level: number): void => {
 		const p = this.host().character?.play;
 		if (!p) return;
-		const max = this.exhaustionMax;
+		// the data cap AND the schema's, because the two disagree above 20: a level the schema refuses
+		// makes every later save throw into a `void`, and the sheet keeps working as if nothing is wrong
+		const max = Math.min(this.exhaustionMax, EXHAUSTION_MAX);
 		p.exhaustion = Math.max(0, Math.min(max, Math.round(level)));
 		if (max > 0 && p.exhaustion >= max) this.host().die('exhaustion');
 	};
@@ -66,8 +76,30 @@ export class EffectsEditor {
 		const system = this.host().character?.system;
 		if (!graph || !system) return null;
 		const row = graph.list('condition', { system }).find((r) => r.id === id);
-		const text = row ? String(row.data.text_en ?? '') : '';
-		return text || null;
+		// the READER's language, not `text_en`: a condition that ships a `text_uk` was being opened in
+		// English beside a panel that had already switched
+		return (row && localizedProse(row, 'text', app.activeLocale)) || null;
+	};
+
+	/**
+	 * The prose an effect can OPEN — what the ⓘ shows.
+	 *
+	 * The playtest read "the (i) does nothing" on a buff, and the ⓘ was simply absent: it rendered
+	 * only for a condition, so a spell's buff — the commonest thing on that panel — had no way to say
+	 * what the spell does. Three sources, first one that answers: the condition's rules text, the row
+	 * that GRANTED it (a spell's own description), then whatever the player typed for a custom one.
+	 *
+	 * Null is a real answer: a hand-made buff carrying only tokens already shows them as tags, and an
+	 * ⓘ that opens the words already on the row is a control that does nothing.
+	 */
+	effectProse = (e: EffectInstance): string | null => {
+		const applied = conditionIdOf(e);
+		const rules = applied ? this.conditionText(applied) : null;
+		if (rules) return rules;
+		const graph = this.host().graph;
+		const row = e.source && graph ? graph.get(e.source) : undefined;
+		const granted = row ? localizedProse(row, 'text', app.activeLocale) : '';
+		return granted || e.text?.trim() || null;
 	};
 
 	/** A condition's own effect tokens (its `effects` column) — what the panel renders as tags for an
@@ -92,7 +124,7 @@ export class EffectsEditor {
 			// B17: carry the catalog ref so an added effect resolves LIVE at derive (fixes propagate),
 			// with the baked label/tokens kept as the orphan fallback.
 			ref: r.effectiveId,
-			label: r.data.name_en,
+			label: localizedName(r, app.activeLocale),
 			tokens: r.data.effects,
 			negative: r.data.negative,
 			durationRounds: r.data.duration_rounds ?? null,

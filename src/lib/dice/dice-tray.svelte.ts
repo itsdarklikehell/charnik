@@ -9,34 +9,31 @@
  * ad-hoc roll (an empty body) and a prefilled attack without a mode flag telling them apart.
  */
 import { app } from '$lib/stores/app.svelte';
-import { rollDamageParts, type DamagePartSpec, type RollLogEntry } from '$lib/combat/roll';
+import { dealsDamage, type DamagePartSpec, type RollLogEntry } from '$lib/combat/roll';
+import { damageSpecsOf, rollLines } from './roll-lines';
 import {
 	ADVANTAGE_MODE,
 	NEXT_ADVANTAGE,
-	rollPool,
 	type AdvantageMode,
 	type BonusDie,
 	type DieMods,
 	type Rng,
-	type RollPoolOptions,
 } from '$lib/rules/dice';
 import { signed } from '$lib/util/format';
+import type { SaidValue } from '$lib/util/say';
 import {
 	PILL_KIND,
 	ROLLER_ROLE,
 	TOKEN_KIND,
 	addToken,
 	canRoll,
-	damageParts,
 	countPill,
+	dicePillToken,
 	emptyLine,
 	isInherited,
 	normalizeLine,
 	pillsFromPool,
 	rollerIssues,
-	rollerNotes,
-	testRoll,
-	volleyOf,
 	type RollerLine,
 	type RollerPill,
 	type RollerRole,
@@ -56,6 +53,10 @@ export interface RollerPrefill {
 	/** The catalog key for `label`, carried straight through to the entries `roll()` answers with —
 	 *  the dice tray has no locale and never turns it into a word. */
 	labelKey?: string;
+	/** ICU values for `labelKey` — a numbered strike's "1 of 2", a content row's own name. Carried for
+	 *  the same reason the key is: without them the recorded row asks the catalog for a numbering frame
+	 *  with no numbers in it. */
+	labelValues?: Record<string, SaidValue>;
 	test?: {
 		dice: Record<number, number>;
 		mod: number;
@@ -76,18 +77,6 @@ export interface RollerPrefill {
 	note?: string;
 }
 
-/** The folded test line → what `rollPool` is asked for. Loop-invariant, so a volley builds it once;
- *  a named function rather than an inline literal because every instance of it is an optional field
- *  that is only spelled when it has a value (`exactOptionalPropertyTypes`). */
-const poolOptions = (spec: ReturnType<typeof testRoll> | null, rng?: Rng): RollPoolOptions => ({
-	// one or the other, never both: `modParts` IS the modifier, told with its provenance
-	...(spec?.modParts ? { modParts: spec.modParts } : { mod: spec?.mod ?? 0 }),
-	advantage: spec?.advantage ?? 0,
-	...(spec?.bonusDice.length ? { bonusDice: spec.bonusDice } : {}),
-	...(spec?.mods ?? {}),
-	...(rng ? { rng } : {}),
-});
-
 /** The caret is in the LINE, not in the suggestion menu. `↓` moves it in, `↑` off the top row moves
  *  it back — so there is one selection, not a line selection and a menu selection at once. */
 const IN_LINE = -1;
@@ -101,6 +90,9 @@ export class DiceTray {
 	/** What the roll is for ("Greataxe"). Empty for an ad-hoc roll. */
 	label = $state('');
 	labelKey = $state('');
+	/** ICU values for `labelKey`, held beside it and travelling with it into every entry `roll()`
+	 *  answers with. `undefined` rather than `{}`: "nobody gave me values" is not "there are none". */
+	labelValues = $state<Record<string, SaidValue> | undefined>(undefined);
 	/** Provenance carried into the logged entry (an upcast's extra dice), never shown as a pill —
 	 *  it explains the roll rather than contributing to it. */
 	note = $state('');
@@ -430,8 +422,12 @@ export class DiceTray {
 			index,
 			normalizeLine({ ...line, pills: line.pills.filter((_, i) => i !== pillIndex) }),
 		);
-		// a pill taken out from the LEFT of the caret would otherwise shift the caret one token right
-		if (pillIndex < this.caretAt(index)) this.setCaret(index, this.caretAt(index) - 1);
+		// a pill taken out from the LEFT of the caret would otherwise shift the caret one token right.
+		// Asked of the STORED caret, not of `caretAt`: that clamps `AT_END` down to the line's length,
+		// so a caret nobody has ever moved reported "in front of the last pill", the guard fired, and
+		// the sentinel that exists to keep the caret at the end was materialised one place short of it.
+		const caret = this.carets[index] ?? AT_END;
+		if (caret !== AT_END && pillIndex < caret) this.setCaret(index, caret - 1);
 	};
 
 	/** Nudge a pill's quantity — the −/+ that appear on hover. They exist because a pill has no caret
@@ -445,7 +441,9 @@ export class DiceTray {
 		if (pill?.kind === PILL_KIND.dice) {
 			const count = pill.count + delta;
 			if (count < 1) return this.removePill(index, pillIndex);
-			next = { ...pill, count, text: `${count}d${pill.sides}` };
+			// through the shared builder, so the token keeps the SIGN a penalty die is spelled with: a
+			// nudged Bane die used to read `2d4`, and unfolding that made it a bonus
+			next = { ...pill, count, text: dicePillToken({ ...pill, count }) };
 		} else if (pill?.kind === PILL_KIND.flat) {
 			const amount = pill.amount + delta;
 			if (amount === 0) return this.removePill(index, pillIndex);
@@ -460,12 +458,21 @@ export class DiceTray {
 		const target = this.lineAt(to);
 		const pill = source?.pills[pillIndex];
 		if (!source || !target || !pill || from === to) return;
+		// the mouse may not reach a state the keyboard cannot: `vocabularyFor` withholds damage types
+		// from a test line, so a dragged one would sit there as a real pill contributing nothing to
+		// `testRoll` and reported by nothing
+		if (pill.kind === PILL_KIND.damageType && target.role !== ROLLER_ROLE.damage) return;
 		this.lines = this.lines.map((l, i) => {
 			if (i === from)
 				return normalizeLine({ ...l, pills: l.pills.filter((_, k) => k !== pillIndex) });
 			if (i === to) return normalizeLine({ ...l, pills: [...l.pills, pill] });
 			return l;
 		});
+		// both lines changed length; `removePill`'s reasoning applies to the line it LEFT, and the pill
+		// lands at the end of the line it joined
+		const caret = this.carets[from] ?? AT_END;
+		if (caret !== AT_END && pillIndex < caret) this.setCaret(from, caret - 1);
+		this.caretToEnd(to);
 	};
 
 	/** A die button in the header: it lands in the line the caret is in. The header has no role of its
@@ -496,6 +503,7 @@ export class DiceTray {
 	reset = (): void => {
 		this.label = '';
 		this.labelKey = '';
+		this.labelValues = undefined;
 		this.note = '';
 		this.lines = [emptyLine(ROLLER_ROLE.test)];
 		this.drafts = [''];
@@ -512,6 +520,7 @@ export class DiceTray {
 		this.reset();
 		this.label = spec.label;
 		this.labelKey = spec.labelKey ?? '';
+		this.labelValues = spec.labelValues;
 		this.note = spec.note ?? '';
 		const lines: RollerLine[] = [];
 		if (spec.test)
@@ -548,7 +557,7 @@ export class DiceTray {
 	 * the d20 and the card resolved a silently-wrong number.
 	 */
 	setDamage = (parts: DamagePartSpec[]): void => {
-		const real = parts.filter((p) => Object.keys(p.dice).length || p.mod);
+		const real = parts.filter((p) => dealsDamage([p])); // one predicate, not two spellings of it
 		const line: RollerLine = {
 			...emptyLine(ROLLER_ROLE.damage),
 			pills: real.flatMap((p) =>
@@ -565,15 +574,10 @@ export class DiceTray {
 		this.drafts = this.lines.map((_, i) => this.drafts[i] ?? '');
 	};
 
-	/** The damage the lines currently describe, as the specs `roll()` throws. Exposed because a
-	 *  surface may have to roll ONE of them again (Savage Attacker rerolls the weapon's part), and
-	 *  reproducing it from the recorded dice would lose the part's crit method and its die mods. */
+	/** The damage the lines currently describe, as the specs a roll throws. Exposed because a surface
+	 *  may have to roll ONE of them again (Savage Attacker rerolls the weapon's part). */
 	get damageSpecs(): DamagePartSpec[] {
-		return this.lines
-			.filter((l) => l.role === ROLLER_ROLE.damage)
-			.flatMap((line) =>
-				damageParts(line).map((p) => (line.crit ? { ...p, crit: this.critMethod } : p)),
-			);
+		return damageSpecsOf(this.lines, this.critMethod);
 	}
 
 	/**
@@ -587,35 +591,16 @@ export class DiceTray {
 	roll = (rng?: Rng): RollLogEntry[] => {
 		this.commit(this.focus);
 		if (!this.rollable) return [];
-		const test = this.lines.find((l) => l.role === ROLLER_ROLE.test && l.pills.length);
-		const spec = test ? testRoll(test) : null;
-		const parts = this.damageSpecs;
-		// a volley is a count on ANY line, not only the test one: a damage-only spell can fire N times
-		// too, and reading it off the test line alone would silently drop that
-		const times = Math.max(1, ...this.lines.map(volleyOf));
-		// what the player called their own dice rides the note beside whatever provenance the roll site
-		// already wrote there — the fold has no number to give those pills, and dropping them was the
-		// last of the four losses at that seam
-		const note = [this.note, ...rollerNotes(this.lines)].filter(Boolean).join(' · ');
-		const at = Date.now();
-		const opts = poolOptions(spec, rng);
-		const out: RollLogEntry[] = [];
-		for (let i = 0; i < times; i++) {
-			const primary = rollPool(spec?.dice ?? {}, opts);
-			const damage = parts.length ? rollDamageParts(parts, rng) : undefined;
-			out.push({
-				// no name typed → the roll is called what the catalog calls an unnamed one, and carries
-				// that as its KEY so the log is not frozen in the language it was rolled in
-				label: this.label || 'Custom roll',
-				...(this.labelKey || !this.label ? { labelKey: this.labelKey || 'roller.customRoll' } : {}),
-				...primary,
-				...(damage ? { damage } : {}),
-				...(note ? { note } : {}),
-				// one instance per millisecond: `at` is what an amendment matches on to rewrite ITS line,
-				// so a volley whose three attacks shared a timestamp would rewrite the wrong one
-				at: at + i,
-			});
-		}
-		return out;
+		return rollLines(
+			{
+				lines: this.lines,
+				label: this.label,
+				labelKey: this.labelKey,
+				...(this.labelValues ? { labelValues: this.labelValues } : {}),
+				note: this.note,
+				critMethod: this.critMethod,
+			},
+			rng,
+		);
 	};
 }

@@ -11,7 +11,7 @@ import { t, translator, type Translate } from '$lib/i18n';
 import { sayText, type SaidText } from '$lib/util/say';
 import { tokensOf, type ContentGraph } from '$lib/content/loader';
 import { rollPool } from '$lib/rules/dice';
-import { NOTE_KEY, type RollName } from '$lib/combat/roll';
+import { NOTE_KEY, nameFields, type RollName } from '$lib/combat/roll';
 import {
 	SPELL_OUTCOME,
 	saidNote,
@@ -298,15 +298,17 @@ export class SpellCasting {
 		const toHit = caster.attack.value + fx.flat;
 		const parts = this.spellDamageParts(r, dmgFx, up.deltas);
 		const hasDmg = dealsDamage(parts);
-		const label = {
-			text: `${r.name} (spell attack)`,
-			key: 'combat.log.spellAttack',
-			values: { name: r.name },
-		};
+		// The spell's own name and nothing appended: the card already says TO HIT above the number, so
+		// "(spell attack)" restated in the label what the row's own captions say — and it said it twice
+		// over on an action that throws more than once. A weapon attack has always logged just its name.
+		const label = { text: r.name };
 		if (wantsTray(e)) {
 			this.host.openRoll(
 				{
-					label: t(label.key, label.values),
+					// the NAME as fields, never a finished sentence: the tray carries the key and its values
+					// into the recorded row, so a roll sent through the tray reads in the language the log is
+					// READ in — the same record the instant path below writes
+					...nameFields(label),
 					test: {
 						dice: { 20: 1 },
 						mod: toHit,
@@ -435,13 +437,17 @@ export class SpellCasting {
 	): void {
 		const [primary, ...rest] = parts;
 		if (!primary) return;
-		const label = name.text;
 		if (wantsTray(e)) {
 			// EVERY part is damage — there is no d20 here. The tray used to put the primary part on the
 			// pool it built the to-hit from, which under the roller's line model would give a Fireball an
 			// advantage toggle and a to-hit total.
 			const note = saidNote(noteParts);
-			this.host.journal.prefill({ label, damage: parts, ...(note ? { note } : {}) });
+			// a spell's NAME is data and the phrase around it is a key — both travel, on this path too
+			this.host.journal.prefill({
+				...nameFields(name),
+				damage: parts,
+				...(note ? { note } : {}),
+			});
 			this.host.openMenu('dice', e);
 		} else {
 			this.host.journal.pushRoll(
@@ -543,10 +549,10 @@ export class SpellCasting {
 	// tap a spell's prep dot to prepare/unprepare it (always-prepared can't be unset)
 	togglePrepared = (r: SpellRow) => {
 		if (!this.host.character) return;
-		// SMELL-4: match by the ref's parsed id segment, not a string suffix — self-evident and stable
-		// if the `type:source:id` ref format ever changes. (`s.spell` is a full ref; `r.id` is the id.)
-		const idOf = (ref: string) => ref.split(':').pop();
-		const sp = this.host.character.build.spells.find((s) => idOf(s.spell) === r.id);
+		// by the REF, which is what a spell IS (`type:source:id`): matching on the bare id made two
+		// same-id spells from two packs one spell, and the first entry always won — so tapping the prep
+		// dot on one flipped the other and read as a no-op
+		const sp = this.host.character.build.spells.find((s) => s.spell === r.ref);
 		// A18-tail: per-class cap gate via the ONE shared seam (identical in the spellbook, D13)
 		const res = canTogglePreparedFor({
 			spells: this.host.character.build.spells,

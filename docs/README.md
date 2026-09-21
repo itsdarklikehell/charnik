@@ -12,8 +12,13 @@ pointer at it, not a second set of rules.
   [release](work/release.md). An item lives in exactly one of these; the reasoning behind it lives in
   the subsystem's own doc below. There is nowhere else open work may hide.
 - [Changelog](changelog.md)
-- [Audit — everything since 0.6.2](audit-sep-09.md) — a fresh-eyes read of the whole release for
-  implementation defects, with what each one is, how it was reproduced, and where the reading stopped.
+
+## For the people using Charnik
+
+- [Effects — the author's guide](guide/effects.md) — how the `effects` column works, for whoever is
+  writing content rather than changing the app. Plain language first, then the full vocabulary: every
+  effect kind, every target, and the formula language. The normative version of the same thing is
+  [internals/effects.md](internals/effects.md).
 
 ## How it works — and which file rules on what
 

@@ -4,10 +4,10 @@
 	// writes/binds go through `combat.*`.
 	import { onMount } from 'svelte';
 	import { _ } from '$lib/i18n';
-	import { dndzone } from 'svelte-dnd-action';
+	import { dragHandleZone } from 'svelte-dnd-action';
 	import { combat } from './combat-view-model.svelte';
 	import { content } from '$lib/content/store.svelte';
-	import { saveCharacterToStore } from '$lib/character/store.svelte';
+	import { saveCharacterGuarded, saveCharacterToStore } from '$lib/character/store.svelte';
 	import { deriveHealth } from '$lib/character/health.svelte';
 	import { onBeforeReload } from '$lib/content/reload';
 	import CombatMenus from './CombatMenus.svelte';
@@ -29,13 +29,10 @@
 	const sheet = $derived(combat.sheet);
 	// The sheet can't compute until content is loaded, so while the graph is still null the wait is
 	// really about content, not the sheet — say so instead of the misleading "computing your sheet".
-	const loadingMessage = $derived(
-		content.graph ? 'Computing your character sheet…' : 'Loading content…',
-	);
+	const loadingMessage = $derived($_(content.graph ? 'loading.sheet' : 'loading.content'));
 	const columns = $derived(combat.layout.columns);
 	const flipDurationMs = combat.layout.flipDurationMs;
-	const dragDisabled = $derived(combat.layout.dragDisabled);
-	const { dndConsider, dndFinalize, releaseDrag } = combat.layout;
+	const { dndConsider, dndFinalize } = combat.layout;
 
 	onMount(combat.load);
 	// D8: expose the rich combat tray through the DiceTrayRequest seam while this route is mounted,
@@ -52,6 +49,12 @@
 	// the "was it a critical?" answer, whichever way the hit points came back.
 	$effect(() => {
 		combat.syncDyingState();
+	});
+
+	// …and an owed concentration save goes with the concentration it was owed for, however that ended
+	// (replaced by the next spell, a long rest, an expiring carrier).
+	$effect(() => {
+		combat.syncPendingConcentration();
 	});
 
 	// A conditional ability's window opening is a thing that HAPPENS, and the sheet is where it is
@@ -78,7 +81,7 @@
 		JSON.stringify(c.ui);
 		JSON.stringify(c.build);
 		clearTimeout(saveTimer);
-		saveTimer = setTimeout(() => void saveCharacterToStore(c), 800);
+		saveTimer = setTimeout(() => void saveCharacterGuarded(c), 800);
 	});
 
 	// flush the pending autosave before a manual refresh, so an unsaved edit survives the reload
@@ -102,7 +105,6 @@
 </script>
 
 <svelte:head><title>{$_('nav.combat')} — Charnik</title></svelte:head>
-<svelte:window onpointerup={releaseDrag} />
 
 {#if combat.noCharacter}
 	<NoCharacter />
@@ -120,7 +122,7 @@
 	<div class="statusrow">
 		{#if c.play.inCombat}
 			<Turnbar {c} />
-		{:else if combat.showTimeBar}
+		{:else}
 			<TimeSkip />
 		{/if}
 		<Playbar />
@@ -134,12 +136,20 @@
 		{#each columns as col, ci (ci)}
 			<div
 				class="panel-column"
-				use:dndzone={{
+				use:dragHandleZone={{
 					items: col,
 					type: 'panel',
-					dragDisabled,
 					flipDurationMs,
 					dropTargetStyle: {},
+					// The floating card keeps the size it is given. Left on, the library resizes it into
+					// whatever slot it is currently over — and these panels are wildly different heights, so
+					// the background kept collapsing and re-growing under text that stayed put.
+					morphDisabled: true,
+					// …and what it is given is CAPPED: a full-height clone of Skills is taller than the
+					// viewport, which made it impossible to aim, and a clone cut down to its title bar left
+					// the question of what you were carrying unanswered. The class caps and fades it
+					// (`styles/components.css`) — enough panel to recognise, never more than a hand carries.
+					transformDraggedElement: (el) => el?.classList.add('dragging-panel'),
 				}}
 				onconsider={(e) => dndConsider(ci, e)}
 				onfinalize={(e) => dndFinalize(ci, e)}

@@ -132,13 +132,25 @@
 		color: var(--color-text);
 		border-bottom-color: var(--color-accent);
 	}
+	/* The full row of tabs measures ~530px. Narrower than that it scrolls sideways rather than wrapping
+	   into rows, because a wrapped row's active underline would float mid-panel instead of sitting on
+	   the strip's own bottom border. */
+	@media (max-width: 640px) {
+		.tabs {
+			overflow-x: auto;
+		}
+		.tab {
+			flex: 0 0 auto;
+			white-space: nowrap;
+		}
+	}
 	.badge {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-micro);
 		min-width: 16px;
 		text-align: center;
 		padding: 1px var(--space-1);
-		border-radius: 20px;
+		border-radius: var(--radius-full);
 		background: var(--color-warning);
 		color: var(--color-warning-text);
 	}

@@ -9,6 +9,7 @@
  * let the player fix the rest — matching the app's "everything doable, nothing enforced to a
  * dead end" stance.
  */
+import { toast } from 'svelte-sonner';
 import { t } from '$lib/i18n';
 import { content, loadContentStore } from '$lib/content/store.svelte';
 import { isRowActive } from '$lib/content/sources.svelte';
@@ -78,6 +79,10 @@ const FALLBACK_SLUG = 'hero';
  * shows it. A carve that moves DERIVATIONS over the draft is cheap; one that moves a bound field is
  * not, and is verified in a driven browser rather than reasoned about.
  */
+/** One id for the Create failure, so a disk that stays full replaces its notice rather than stacking
+ *  one per press. Same pattern as the draft autosave's. */
+const CREATE_FAILED_TOAST = 'build-create-failed';
+
 export class BuildVM {
 	// read the shared reactive content store → a live content refresh re-derives options with no reload
 	graph = $derived(content.graph);
@@ -111,6 +116,7 @@ export class BuildVM {
 	 *  "New character" after a level-up must clear the prior edit/hydrated state). Keeps the graph. */
 	reset = () => {
 		this.edit = null;
+		this.pickedPhoto = null; // bytes belong to the build they were picked for, not to the next one
 		this.draft = blankDraft();
 		this.classPicks.clear();
 		this.drafts.renew();
@@ -138,6 +144,7 @@ export class BuildVM {
 	/** Resume an unfinished build, cache and all. */
 	hydrateDraft = (record: DraftRecord): void => {
 		this.edit = null;
+		this.pickedPhoto = null; // see `reset`
 		// parsed, not cast: the record is a file the user can edit and an older Charnik may have written
 		this.draft = parseDraftState(record.draft);
 		this.classPicks = parseClassPicks(record.classPicks);
@@ -156,6 +163,9 @@ export class BuildVM {
 		const settled = structuredClone(loaded);
 		this.draft = loaded;
 		// This view-model is a singleton, so everything the PREVIOUS build left behind is still here.
+		// The portrait is the sharpest of those: `portraitSource` prefers a pick over the stored file,
+		// so an abandoned build's face would show on this character AND be written over their own.
+		this.pickedPhoto = null;
 		// The stash is keyed by class ref alone: left in place, taking a class this character never had
 		// hands it the level and the skills another character stashed under that same ref.
 		this.classPicks.clear();
@@ -176,6 +186,12 @@ export class BuildVM {
 			featSkills: [...(char.build.featSkills ?? [])],
 			skills: new Set(char.build.skills),
 			spells: new Set(this.draft.selectedSpells),
+			spellFlags: new Map(
+				char.build.spells.map((s) => [
+					s.spell,
+					{ prepared: s.prepared, alwaysPrepared: s.alwaysPrepared },
+				]),
+			),
 			loaded: settled
 		};
 		this.history.reset();
@@ -312,11 +328,11 @@ export class BuildVM {
 
 	/** Skill proficiencies and expertise — the class list, the background's grants, and the two capped
 	 *  pickers over them. See skill-picks.svelte.ts. */
-	skillPicks = new SkillPicks(() => this);
+	skillPicks: SkillPicks = new SkillPicks(() => this);
 
 	/** Feat / ASI slots (which levels grant one, what fills it, the choices it then asks for) — see
 	 *  feats.svelte.ts. */
-	feats = new FeatSlots(() => this);
+	feats: FeatSlots = new FeatSlots(() => this);
 	/** Ability scores + every boost layered on them — see ability-allocation.svelte.ts. Read as
 	 *  `b.abilities.*`: unlike the combat subsystems this one has a single consumer component, so it
 	 *  is addressed directly instead of behind a dozen forwarding accessors. */
@@ -382,9 +398,17 @@ export class BuildVM {
 				featSkills: { ...this.draft.slotFeatSkills }
 			},
 			languages: [...this.draft.selectedLanguages],
+			customLanguages: [...this.draft.customLanguages],
+			customTools: [...this.draft.customTools],
 			inventory: this.draft.inventory.map((i) => ({ ...i })),
-			// cantrips are always-prepared; leveled spells start prepared (tweak in the Spellbook)
+			// A spell the character ALREADY had keeps the flags it had: unpreparing one is the player's
+			// decision and an always-prepared domain spell is the class's, and recomputing both from the
+			// level re-prepared what they put away and demoted what they never chose — which also moved
+			// the prepared tally against `preparedCap`. The default is for a NEWLY picked spell only:
+			// cantrips are always-prepared, leveled spells start prepared (tweak in the Spellbook).
 			spells: this.draft.selectedSpells.map((ref) => {
+				const had = this.edit?.spellFlags.get(ref);
+				if (had) return { spell: ref, ...had };
 				const lvl = Number(rowOfType(this.graph?.get(ref), 'spell')?.data.level ?? 0);
 				return { spell: ref, prepared: lvl > 0, alwaysPrepared: lvl === 0 };
 			}),
@@ -552,11 +576,24 @@ export class BuildVM {
 			}
 			await this.persistPhoto(character);
 			await saveCharacterToStore(character);
-			// the draft became a character, so the unfinished copy has nothing left to be
+			// the draft became a character, so the unfinished copy has nothing left to be — and the
+			// session gives up its identity with it, or the autosave landing after Create (the photo
+			// write above is itself a draft mutation, which arms one) writes the draft back under the
+			// same guid and resurrects it in the roster
 			await this.drafts.discard();
+			this.drafts.renew();
 			// make the freshly-created character the active one so Combat opens IT, not the demo
 			await openCharacter(character.id);
 			return character.id;
+		} catch (e) {
+			// a full disk, a renamed data folder, a permission error — the one button that creates a
+			// character used to answer a rejected promise into an `onclick`: no toast, no error, and
+			// "Saving…" back to "Create" as if nothing had been asked of it
+			toast(t('build.notice.createFailed'), {
+				id: CREATE_FAILED_TOAST,
+				description: e instanceof Error ? e.message : String(e),
+			});
+			return null;
 		} finally {
 			this.saving = false;
 		}

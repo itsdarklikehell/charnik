@@ -30,6 +30,14 @@ is a standing risk of a well-meaning wrong merge. **Do not collapse them:**
   `effects.test.ts` keeps them aligned; a shared import would defeat the point.
 - **`formatModifier`** (`rules/dice`, pure core) versus **`signed`** (`util/format`) — same body, but
   the hot roll path in the core must not pull in `util`. The duplication is the accepted cost.
+- **The CSS census's top rows are STATES, not controls.** `css-dups.mjs` counts a hover pair
+  (`border-strong` + `text`) across 10 selectors and an accent-selected triple across 6, and the
+  obvious reading — "compose `.chip` / `.pill-btn` / `.eyebrow` instead" — is wrong for most of them:
+  `.cls`, `.choice` and `.jumpbtn` are `radius-full` at three different sizes and paddings, and the
+  `.eyebrow` family carries `text-transform: uppercase` + `letter-spacing` that a weight figure or a
+  timestamp must not get. Two declarations shared by two different controls is a coincidence of the
+  palette, not a shared class. Merge only where the base rules are the same too — `.syschip` was, and
+  is now `.chip` plus its padding.
 - **`displayNamesByLocale`** and the translate name reads versus **`localizedName`** — different
   semantics. Search indexes *all* locales with no fallback; translate uses `?? ''`, where empty means
   "not translated" and specifically **not** the English fallback. Merging breaks both.
@@ -66,6 +74,20 @@ For a state the harness does not cover, write a one-off Playwright script **insi
 script in a temp directory throws module-not-found. Drive to the state, screenshot, look at the PNG,
 delete the script. Screenshots go in `design-preview/`, which is gitignored for images.
 
+**`tools/visual/narrow.mjs`** is the other half, because `shot.mjs` renders at 1280 and nothing in it
+can see a phone breaking. It drives every route at 393px and 320px and fails on two things: a
+`document.scrollWidth` wider than the viewport (which scrolls the whole page sideways and drags every
+`position: fixed` overlay off-side), and any box inside `main` wider than `main` that no ancestor
+scrolls on purpose. It names the deepest offender rather than every ancestor that inherited the floor.
+`--locale=uk` re-runs it in Ukrainian, whose labels run wider than English and are what usually breaks
+a row that English clears; `--width=` / `--height=` take one size, e.g. a landscape phone. Same `BASE`
+caveat as above. Unlike `shot.mjs` it needs no baseline, so it is the cheaper one to run first.
+
+It prints one advisory beside the failures: a **tap-target census** of controls a 24×24 finger square
+does not reliably hit. It HIT-TESTS rather than reading boxes, because most of the small controls here
+already carry an invisible `::before` expander — a box-size census calls those broken and sends you to
+fix what is already fixed.
+
 Also here: `tools/visual/css-dups.mjs`, `css-name-collisions.mjs`, `css-classes.mjs`, and the
 class-refactor helpers `hoist-class.mjs` and `rename-class.mjs`.
 
@@ -99,11 +121,16 @@ is fine, while a 550-line one carrying 221 lines of script is not.
 
 ## The rest of `pnpm lint`
 
-- **`pnpm knip`** — its rules are set to `warn`, so it reports and exits 0. It is a report, not a
-  gate. Do not reintroduce unused exports, and triage what it lists: in active development an unused
-  export is sometimes scaffolding for planned work, so read before deleting. Truly orphaned with no
-  plan behind it goes; planned stays, marked (`@public` JSDoc silences the warning) with the wiring
-  gap noted.
+- **`pnpm knip`** — `exports`, `types`, `enumMembers` and `duplicates` are set to `warn`, so those
+  report and exit 0. Triage what they list: in active development an unused export is sometimes
+  scaffolding for planned work, so read before deleting. Truly orphaned with no plan behind it goes;
+  planned stays, marked (`@public` JSDoc silences the warning) with the wiring gap noted.
+  > **`files` is NOT a warning — an unused FILE fails `pnpm lint`.** And the failure rarely points at
+  > the file that caused it: knip compiles a `.svelte` file to find its imports, and when one trips
+  > that step the whole import graph below it disappears, so **every component it pulled in is
+  > reported as unused while the file itself is not**. One `$derived` holding a template literal in
+  > `PanelCard.svelte` reported eight untouched combat panels. Read the list as a POINTER — the
+  > culprit is whatever imports them — and bisect the file you actually edited.
 - **`pnpm jscpd`** — copy-paste detection, threshold 1.8%. The config reporter is `silent`, i.e. the
   one-line verdict and nothing else, because a hook that prints two hundred lines of CSS on every
   successful commit trains you to stop reading it. The threshold still fails the commit; the reporter
@@ -216,7 +243,11 @@ particular type-checks *nothing*, because vite transpiles with esbuild.
   gate. For a tight loop use `pnpm check:watch`: one full pass, then each save re-checks in about a
   second.
 - **Browser tests need a local chromium.** `*.browser.test.ts` run under the `browser` vitest project;
-  a fresh machine needs `pnpm exec playwright install chromium` first. Run just them with
+  a fresh machine needs `pnpm exec playwright install chromium` first — and so does an OLD machine
+  after a playwright bump, because each release pins its own chromium build number and the previous
+  one no longer satisfies it. It surfaces as a test FAILURE (`Executable doesn't exist at
+  …chromium_headless_shell-<n>`) with 16 files silently unreported, not as a missing-browser message,
+  so re-run the install before reading it as a regression. Run just them with
   `pnpm vitest run --project browser`. Under vitest-browser-svelte 3, `render()` is **async** — miss
   the `await` and you get `screen.getByRole is not a function`.
 - **A type-aware lint COUNT is not a defect count.** `@typescript-eslint/no-unsafe-*` cannot see

@@ -10,9 +10,10 @@
 	import { toast } from 'svelte-sonner';
 	import { _ } from '$lib/i18n';
 	import { build } from '../build-view-model.svelte';
-	import { SYSTEMS } from '$lib/rules/pipeline';
+	import { SYSTEMS, SYSTEM_SHORT_LABELS } from '$lib/rules/pipeline';
 	import { signed } from '$lib/util/format';
 	import EditionSwitchDialog from './EditionSwitchDialog.svelte';
+	import { provenance } from '$lib/actions/provenance';
 	import type { SystemId } from '$lib/stores/app.svelte';
 	const b = build;
 
@@ -110,7 +111,7 @@
 			<button
 				class:on={b.draft.system === sys}
 				aria-pressed={b.draft.system === sys}
-				onclick={() => askSwitch(sys)}>{sys}</button
+				onclick={() => askSwitch(sys)}>{SYSTEM_SHORT_LABELS[sys]}</button
 			>
 		{/each}
 	</div>
@@ -119,14 +120,14 @@
 			class:on={b.draft.strict}
 			aria-pressed={b.draft.strict}
 			onclick={() => (b.draft.strict = true)}
-			title={$_('build.strictHint')}>{$_('build.strict')}</button
+			use:provenance={$_('build.strictHint')}>{$_('build.strict')}</button
 		>
 		<button
 			class="free"
 			class:on={!b.draft.strict}
 			aria-pressed={!b.draft.strict}
 			onclick={() => (b.draft.strict = false)}
-			title={$_('build.freeHint')}>{$_('build.free')}</button
+			use:provenance={$_('build.freeHint')}>{$_('build.free')}</button
 		>
 	</div>
 	<div class="segment-group" role="group" aria-label={$_('build.shortRest')}>

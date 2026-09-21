@@ -238,6 +238,36 @@ describe('deriveSheet aggregator', () => {
 		expect(armed.name).toBe('Flame Tongue'); // still the magic item, not renamed to its base
 	});
 
+	it('an item that REQUIRES attunement grants nothing while merely equipped', () => {
+		const c = wizard();
+		// Flame Tongue carries `attunement` and `flat_bonus:damage+2`; a chosen base makes it a real weapon
+		const entry = {
+			item: `item:${S}:flame_tongue`,
+			qty: 1,
+			equipped: true,
+			attuned: false,
+			base: `item:${S}:greataxe`,
+		};
+		c.build.inventory = [entry];
+		const equipped = characterSchema.parse(c);
+		const equippedRow = computeAttacks(equipped, deriveSheet(equipped, graph), graph)[0]!;
+		// the greataxe's own dice are there (the base is a mundane weapon), the magic +2 is not
+		expect(equippedRow.damageParts[0]?.pool).toEqual({ 12: 1 });
+		expect(attackNotes(equippedRow)).toContain('Not attuned');
+
+		c.build.inventory = [{ ...entry, attuned: true }];
+		const worn = characterSchema.parse(c);
+		const attunedRow = computeAttacks(worn, deriveSheet(worn, graph), graph)[0]!;
+		expect(attackNotes(attunedRow)).not.toContain('Not attuned');
+		expect(attunedRow.damageParts[0]!.mod).toBe(equippedRow.damageParts[0]!.mod + 2);
+
+		// …and an item that needs NO attunement still works on equip alone
+		c.build.inventory = [
+			{ item: `item:${S}:leather_armor`, qty: 1, equipped: true, attuned: false },
+		];
+		expect(deriveSheet(characterSchema.parse(c), graph).ac.value).toBeGreaterThan(10);
+	});
+
 	it('ITEM-TEMPLATES: a chosen base gives an ARMOUR template its AC, not only a weapon its dice', () => {
 		const c = wizard();
 		c.build.inventory = [
@@ -639,12 +669,26 @@ describe('deriveSheet aggregator', () => {
 		);
 	});
 
-	it('adds a shield when raised (the play-state toggle, not the inventory flag)', () => {
+	it('adds the shield that is EQUIPPED, at the AC its own row declares', () => {
 		const c = wizard();
-		c.play.shieldRaised = true;
+		c.build.inventory = [
+			...c.build.inventory,
+			{ item: `item:${S}:shield`, qty: 1, equipped: true, attuned: false },
+		];
 		const s = deriveSheet(characterSchema.parse(c), graph);
 		expect(s.ac.value).toBe(17); // leather 11 + DEX 2 + shield 2 + faith 2
 		expect(s.ac.trace.map((x) => x.source)).toContain('Shield');
+	});
+
+	it('a shield that is carried but not equipped is worth nothing', () => {
+		const c = wizard();
+		c.build.inventory = [
+			...c.build.inventory,
+			{ item: `item:${S}:shield`, qty: 1, equipped: false, attuned: false },
+		];
+		const s = deriveSheet(characterSchema.parse(c), graph);
+		expect(s.ac.value).toBe(15); // leather 11 + DEX 2 + faith 2
+		expect(s.ac.trace.map((x) => x.source)).not.toContain('Shield');
 	});
 
 	it('applies a custom flat_bonus to a specific skill and save (GM modifier)', () => {

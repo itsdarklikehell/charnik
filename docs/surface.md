@@ -8,7 +8,7 @@ BEFORE writing a CSS class or a TS helper, so existing ones get reused instead o
 Regenerate with `pnpm surface`. Covers `src/lib` only (routes/tests excluded),
 EXCEPT the duplicate-suspects section, which scans all of `src`.
 
-## Duplicate suspects (65)
+## Duplicate suspects (70)
 
 Review list, NOT a gate: same names / identical bodies / identical literal arrays in
 2+ files. Before adding to it, check whether the shared home already exists; before
@@ -17,30 +17,35 @@ reused for genuinely different things) — judge, then either merge or leave.
 
 **Same name, several files:**
 
+- `say` ×6 — src/lib/combat/effects-view.ts · src/lib/util/say.ts · src/routes/build/blocks/ChangeList.svelte · src/routes/dev/characters-write/+page.svelte · src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
+- `label` ×5 — src/lib/components/settings/ThemesSettings.svelte · src/lib/content/grouping.ts · src/lib/content/homebrew.ts · src/routes/build/blocks/RarityRange.svelte · src/routes/build/rows.ts
 - `open` ×5 — src/lib/actions/provenance.ts · src/routes/+page.svelte · src/routes/build/blocks/SheetAbilities.svelte · src/routes/build/blocks/SheetOrigin.svelte · src/routes/build/blocks/SheetSpells.svelte
 - `persist` ×5 — src/lib/components/settings/ThemesSettings.svelte · src/lib/content/packs.svelte.ts · src/lib/content/sources.svelte.ts · src/lib/effects/plugin-store.svelte.ts · src/lib/stores/app.svelte.ts
 - `place` ×5 — src/lib/actions/provenance.ts · src/routes/build/blocks/PickerCard.svelte · src/routes/build/blocks/PickerPeek.svelte · src/routes/combat/CombatMenus.svelte · src/routes/combat/blocks/EffectDurationMenu.svelte
-- `say` ×5 — src/lib/combat/effects-view.ts · src/lib/util/say.ts · src/routes/build/blocks/ChangeList.svelte · src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
-- `label` ×4 — src/lib/components/settings/ThemesSettings.svelte · src/lib/content/grouping.ts · src/lib/content/homebrew.ts · src/routes/build/rows.ts
 - `num` ×4 — src/lib/build/sheet-diff.ts · src/lib/character/derive-stats.ts · src/lib/character/spellcasting.ts · src/lib/effects/expression-evaluator.ts
 - `onKeydown` ×4 — src/lib/actions/dismissOnEscape.ts · src/lib/actions/provenance.ts · src/lib/actions/trapFocus.ts · src/lib/components/RollerLine.svelte
+- `add` ×3 — src/lib/components/UpcastBuilder.svelte · src/routes/build/ability-allocation.svelte.ts · src/routes/build/blocks/OwnEntries.svelte
 - `fileOf` ×3 — src/lib/character/draft-repository.ts · src/lib/character/repository.ts · src/lib/styles/themeFiles.ts
 - `files` ×3 — src/lib/character/draft-repository.ts · src/lib/content/review.svelte.ts · src/lib/storage/fetch.ts
 - `inEdition` ×3 — src/lib/content/search.ts · src/routes/compendium/[...entry]/+page.svelte · src/routes/translate/+page.svelte
 - `name` ×3 — src/lib/content/item-tags.ts · src/lib/storage/browser.ts · src/lib/styles/themeFiles.ts
 - `norm` ×3 — src/lib/storage/browser.ts · src/lib/storage/migrate.ts · src/routes/+layout.svelte
 - `now` ×3 — src/lib/content/remote/install.ts · src/lib/effects/plugin-registry.ts · src/lib/effects/plugin-sandbox.ts
-- `of` ×3 — src/lib/character/derive.ts · src/lib/content/spellAccess.ts · src/routes/build/inspector-specs.ts
+- `of` ×3 — src/lib/character/derive-setup.ts · src/lib/content/spellAccess.ts · src/routes/build/inspector-specs.ts
+- `probe` ×3 — src/routes/dev/characters-write/+page.svelte · src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
 - `REPO` ×3 — src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte · src/routes/dev/packs/+page.svelte
+- `REPORT` ×3 — src/routes/dev/characters-write/+page.svelte · src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
 - `save` ×3 — src/lib/components/ContentMetaModal.svelte · src/lib/components/EditContentForm.svelte · src/routes/translate/+page.svelte
 - `sourceOf` ×3 — src/lib/components/RollerLine.svelte · src/lib/content/remote/diff.ts · src/lib/effects/resolver.ts
 - `toggle` ×3 — src/lib/components/ClassPicker.svelte · src/lib/components/settings/PluginsSettings.svelte · src/routes/compendium/[...entry]/+page.svelte
-- `add` ×2 — src/lib/components/UpcastBuilder.svelte · src/routes/build/ability-allocation.svelte.ts
+- `ARROW_MOVE` ×2 — src/routes/combat/blocks/PanelCard.svelte · src/routes/combat/blocks/RowGrip.svelte
 - `blankDraft` ×2 — src/lib/content/homebrew.ts · src/routes/build/draft.ts
 - `carrier` ×2 — src/lib/effects/plugin.bench.ts · src/test-support/plugin-fixtures.ts
 - `CASES` ×2 — src/routes/dev/roller/+page.svelte · src/routes/dev/rolltoast/+page.svelte
 - `cell` ×2 — src/lib/components/UpcastBuilder.svelte · src/lib/content/migrations.ts
+- `check` ×2 — src/routes/dev/characters-write/+page.svelte · src/routes/dev/packs-write/+page.svelte
 - `choose` ×2 — src/lib/components/FirstRunModal.svelte · src/lib/components/LanguagePicker.svelte
+- `cleanup` ×2 — src/routes/dev/characters-write/+page.svelte · src/routes/dev/packs-write/+page.svelte
 - `close` ×2 — src/lib/actions/provenance.ts · src/lib/dice/roller.ts
 - `closeOnOutside` ×2 — src/routes/combat/CombatMenus.svelte · src/routes/combat/blocks/EffectDurationMenu.svelte
 - `CONFIG_PATH` ×2 — src/lib/content/packs.svelte.ts · src/lib/content/sources.svelte.ts
@@ -48,6 +53,7 @@ reused for genuinely different things) — judge, then either merge or leave.
 - `deleteDraft` ×2 — src/lib/character/draft-repository.ts · src/lib/drafts/store.ts
 - `DRAFTS_DIR` ×2 — src/lib/character/draft-repository.ts · src/lib/drafts/store.ts
 - `EFFECT_KINDS` ×2 — src/lib/content/schemas.ts · src/lib/effects/token-parser.ts
+- `entryOf` ×2 — src/lib/components/EntryList.svelte · src/routes/combat/roll-journal.svelte.ts
 - `errText` ×2 — src/lib/effects/plugin-sandbox.ts · src/lib/util/format.ts
 - `fieldLabel` ×2 — src/lib/components/EditContentForm.svelte · src/lib/content/detail.ts
 - `follow` ×2 — src/routes/combat/CombatMenus.svelte · src/routes/combat/blocks/EffectDurationMenu.svelte
@@ -60,17 +66,16 @@ reused for genuinely different things) — judge, then either merge or leave.
 - `load` ×2 — src/lib/stores/app.svelte.ts · src/routes/+layout.ts
 - `localizedName` ×2 — src/lib/content/detail.ts · src/lib/content/names.ts
 - `MAX_MAIN_JS_BYTES` ×2 — src/lib/effects/plugin-host.ts · src/lib/effects/plugin-sandbox.ts
+- `moveOnArrow` ×2 — src/routes/combat/blocks/PanelCard.svelte · src/routes/combat/blocks/RowGrip.svelte
 - `NOTE_KEY` ×2 — src/lib/combat/roll.ts · src/lib/rules/pipeline.ts
 - `onClick` ×2 — src/lib/components/RollButton.svelte · src/routes/+layout.svelte
 - `onDown` ×2 — src/lib/components/LanguagePicker.svelte · src/routes/compendium/[...entry]/+page.svelte
 - `onKey` ×2 — src/lib/components/settings/DataMigrationDialog.svelte · src/routes/build/+page.svelte
 - `pick` ×2 — src/routes/combat/blocks/EffectDurationMenu.svelte · src/routes/compendium/[...entry]/+page.svelte
 - `PIP_CAP` ×2 — src/routes/combat/blocks/CombatStrip.svelte · src/routes/combat/blocks/panels/EffectsPanel.svelte
-- `probe` ×2 — src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
-- `rather` ×2 — src/lib/dice/dice-tray.svelte.ts · src/lib/rules/proficiency.ts
+- `rather` ×2 — src/lib/dice/roll-lines.ts · src/lib/rules/proficiency.ts
 - `reflow` ×2 — src/routes/combat/CombatMenus.svelte · src/routes/combat/blocks/EffectDurationMenu.svelte
 - `remove` ×2 — src/lib/components/DraftsPane.svelte · src/lib/components/settings/ThemesSettings.svelte
-- `REPORT` ×2 — src/routes/dev/packs-live/+page.svelte · src/routes/dev/packs-write/+page.svelte
 - `restoreDemo` ×2 — src/lib/components/NoCharacter.svelte · src/lib/components/settings/StorageSettings.svelte
 - `rowName` ×2 — src/lib/content/loader.ts · src/routes/build/rows.ts
 - `same` ×2 — src/routes/build/draft-history.svelte.ts · src/routes/combat/roll-journal.svelte.ts
@@ -92,7 +97,7 @@ Style **only** through these — never hardcode a color/size. Names are semantic
 
 **misc** — `--space-0`, `--space-1`, `--space-1-5`, `--space-2`, `--space-2-5`, `--space-3`, `--space-4`, `--space-5`, `--space-6`, `--space-8`
 
-**radius** — `--radius-sm`
+**a hairline rounding — a tag, a 2px-ish inset marker** — `--radius-sm`
 
 **the default/base radius — by far the most common (buttons, inputs, chips, cards)** — `--radius-md`, `--radius-lg`, `--radius-full`
 
@@ -118,7 +123,7 @@ Style **only** through these — never hardcode a color/size. Names are semantic
 
 **faint red tint bg (invalid-cell / danger banners)** — `--color-overlay`, `--color-accent`, `--color-accent-bright`, `--color-accent-deep`, `--color-accent-soft`, `--color-resource`, `--color-good`, `--color-good-line`, `--color-resource-line`, `--color-warning-text`, `--color-danger-soft`
 
-## Global CSS classes (80)
+## Global CSS classes (81)
 
 A shared class lives in exactly ONE place. Reuse before making a scoped lookalike.
 
@@ -159,7 +164,9 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 | `.dialog-spacer` | components.css |  |
 | `.dialog-subtitle` | components.css |  |
 | `.dialog-title` | components.css |  |
-| `.drag-handle` | components.css |  |
+| `.dnd-rows` | components.css | --- a reorderable list of combat rows: the zone, and one row beside its grip --- A combat row IS a button, so its gri… |
+| `.drag-handle` | components.css | The grip is a SPAN with a button role, not a <button>: `svelte-dnd-action` discards a press whose target has a `value… |
+| `.dragging-panel` | components.css | A clone of the whole panel is as tall as the panel, and the tallest of them is taller than the window — impossible to… |
 | `.durpill` | components.css | duration / generic mono pill |
 | `.eyebrow` | components.css |  |
 | `.ghost` | components.css |  |
@@ -176,11 +183,10 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 | `.meta-key` | GenericHead.svelte :global |  |
 | `.meta-value` | GenericHead.svelte :global |  |
 | `.meter` | components.css | --- meter: a proportion (encumbrance, the social read-out) --- |
-| `.mobile-blocked` | MobileWarning.svelte :global |  |
 | `.mono-path` | components.css | a filesystem path shown inline (settings Data row) — mono, muted, ellipsized |
 | `.monster-type` | components.css |  |
 | `.muted` | components.css |  |
-| `.on` | components.css |  |
+| `.on` | components.css | the SELECTED chip. |
 | `.panel-head` | components.css | panel header: click the whole title area (chev + name) to collapse |
 | `.pill-btn` | components.css | display-font pill button — the shared toolbar/disclosure control (combat toolbar, compendium group-by + disclosure su… |
 | `.primary` | components.css |  |
@@ -188,6 +194,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 | `.provenance-popover` | components.css | --- the provenance popover: how an auto-calculated value explains itself (ui.md ▸ rule 3). |
 | `.roll-toast` | RollToast.svelte :global |  |
 | `.row-name` | components.css |  |
+| `.row-wrap` | components.css |  |
 | `.sec-head` | components.css | --- settings-tab section chrome (shared by every Settings panel: Content-health / Sources / Collisions) — one heading… |
 | `.sec-note` | components.css |  |
 | `.sectlab` | components.css | section label (with trailing rule) |
@@ -200,7 +207,6 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 | `.stepper` | components.css | --- number stepper: a count you can nudge either way (class level, ability scores, item qty) --- |
 | `.text-field` | components.css | text-input / textarea field base (edit forms, inline editors). |
 | `.toggle-track` | components.css | --- toggle-track: the pill on/off switch knob (Switch component, combat menus) --- |
-| `.topbar` | MobileWarning.svelte :global |  |
 | `.trace` | components.css | --- small shared bits --- |
 | `.visually-hidden` | app.css | Screen-reader-only content (labels, live regions). |
 | `.warn` | components.css | Attention-dialog badge tint: `warn` for reversible "needs your attention" prompts (orphaned / discarded drafts), matc… |
@@ -278,6 +284,8 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function recreateDemoCharacter` — Reset the demo to a fresh build — overwrites the persisted demo save, makes it active, refreshes * the roster (also (…
 - `function openCharacter` — Open a saved character as the active one (returns null if the save is bad/missing).
 - `function saveCharacterToStore` — Persist a character (create or update) and refresh the roster.
+- `function saveCharacterGuarded` — * Persist a character and SAY SO when it does not happen.
+- `function restoreBackup` — * Put one of a character's snapshots back as its live save, and make what is on screen agree.
 - `function removeCharacter` — Delete a character and refresh the roster.
 
 ### `src/lib/content/packs.svelte.ts`
@@ -333,6 +341,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function checkFailure` — * How such a failure reads to the user.
 - `function fetchRepo` — * The repo to FETCH from: the pasted URL, plus the branch a check actually found the tree on.
 - `function guarded` — * The disk half of an apply can THROW where the network half returns a value: a full disk, `EBUSY` * from a content C…
+- `function guardedDisk` — * The same guard for the disk operations that do NOT return an `ApplyResult` — a rename, an * uninstall, a rollback.
 - `function refuse` — Refuse to write, on BOTH channels at once: the panel's error list and the caller's answer.
 
 ### `src/lib/content/remote/updates.svelte.ts`
@@ -395,6 +404,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `const plugins`
 - `function loadPlugins` — Discover plugins + build the evaluator for already-consented, enabled ones.
 - `function refreshPlugins` — Re-scan `<dataDir>/plugins/` (user added/edited a folder) and rebuild the evaluator.
+- `function forgetPlugin` — Forget one plugin: its consent and its enablement go, so running it again asks again.
 - `function retryPlugins` — Give plugins that auto-disabled (3 failures) another chance on THIS character without a full * re-scan: clearing the …
 - `function consentAndEnable` — The user accepted the consent dialog for THIS plugin at THIS code hash → record + enable.
 - `function revokePackPlugins` — * Drop consent + enablement for every plugin a content pack shipped.
@@ -428,11 +438,15 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function simulateUpdateAvailable` — Dev-only: light the update chip without a published release, to preview its styling/states.
 - `function installUpdate`
 
-## Library functions & types (119 modules)
+## Library functions & types (125 modules)
 
 ### `src/lib/actions/dismissOnEscape.ts`
 
 - `const dismissOnEscape` — * Call `onEscape` when the Escape key is pressed while the node is mounted (AUDIT F8) — the one home * for the `<svel…
+
+### `src/lib/actions/floatInBody.ts`
+
+- `function floatInBody` — * Move a floating element to `document.body` for as long as it lives.
 
 ### `src/lib/actions/provenance.ts`
 
@@ -502,6 +516,11 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `interface AssembleWrapper` — The character-envelope fields that wrap an assembled build.
 - `function assembleCharacter` — * Validate an assembled build into a Character.
 
+### `src/lib/character/derive-assemble.ts`
+
+- `interface AssembleInput` — The inputs assembly needs beyond that state: what was loaded, what was asked for, and the two * accumulators the whol…
+- `function assembleSheet`
+
 ### `src/lib/character/derive-context.ts`
 
 - `function baseResolveState` — The BASE (pre-effect) resolve state, for building `castCtx` when auto-calc is OFF: no effects were * gathered, so sco…
@@ -525,11 +544,10 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 
 ### `src/lib/character/derive-setup.ts`
 
-- `function seedAbilityBase` — A10 seeds: the score fold starts from the base score + allocated boosts, as traced contributions.
-- `function computeClassLevels` — Class levels keyed by BARE id (`class_level.monk`), summed across multiclass entries.
-- `function pickPrimaryCaster` — The primary caster's ability (highest caster-class level) — the ctx's default `spellcasting_mod`.
 - `interface HitDiePool` — A hit-dice pool: one die size + how many of it the character has (= summed levels of classes with * that die).
 - `function hitDicePools` — Group the character's classes into hit-dice pools by die size (RAW multiclass: pool same-size dice, * keep different …
+- `interface DeriveSetup` — Everything `deriveSheet` needs in hand BEFORE the fold: the level-derived numbers, the pure build * slices, the equip…
+- `function prepareDerive`
 
 ### `src/lib/character/derive-stats.ts`
 
@@ -543,13 +561,14 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function resolveClassSaves` — Save-proficient abilities: build.saves + effect-granted + the STARTING class's saves.
 - `function deriveAbilityBlocks`
 - `function deriveSkills` — Skills: the BUILD's chosen level (expertise requires the chosen proficiency) combines with the * effect-granted level…
-- `function deriveAc` — AC: equipped armor (dex-capped) + a raised shield's +2 (the play-state flag, the single source * for it — not the inv…
+- `function deriveAc` — AC: equipped armor (dex-capped) + the shield in hand, else unarmored; then AC effects fold on top.
 - `function deriveSpeed` — Speed from species base; A3: armor whose `str_min` exceeds the wearer's STR drops it 10 ft (RAW, * both editions), tr…
 - `function derivePassives` — Passive score of every skill (10 + mod ± adv/dis, `passive.<skill>` effects folded).
 - `function deriveDamageSensitivities` — Damage defenses collected from `damage_sensitivity` facts, deduped per bucket.
 
 ### `src/lib/character/derive-targets.ts`
 
+- `const isPluginContributionTarget` — * May a plugin `contributions` key name this target (plugins.md §4.4)?
 - `const isEffectTargetSupported` — B13 validator handed to collectFacts: is this (kind, target) pair consumed by some stat/roll?
 
 ### `src/lib/character/derive.ts`
@@ -558,7 +577,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `re-export SKILL_ABILITY`
 - `re-export type SkillId`
 - `interface CharacterSheet`
-- `function deriveSheet` — Stays over max-lines-per-function (~134) by design — a deliberate D1 exception like CombatVM.
+- `function deriveSheet` — A4: armor with the stealth-disadvantage flag synthesizes a `disadvantage:skill.stealth` FACT so * it reaches BOTH the…
 
 ### `src/lib/character/draft-repository.ts`
 
@@ -608,6 +627,9 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `interface LoadResult`
 - `interface RosterEntry`
 - `function backupCharacter` — Snapshot the CURRENT `character.json` into the rotating ring for `tier`, then prune to the newest * N.
+- `interface CharacterBackup` — One snapshot the rings hold, as the restore UI needs it.
+- `function listCharacterBackups` — * Every snapshot of one character, both rings merged, newest first — the READER the two writers * never had.
+- `function restoreCharacterBackup` — * Put one snapshot back as the live save.
 - `function snapshotCharacterOnLaunch` — Take the once-per-session launch snapshot of a character (B3).
 - `function saveCharacter` — Write a character (validates first; refuses to persist an invalid one).
 - `function writeCharacterPhoto` — Write a character's portrait and return the name to store in `build.photo`.
@@ -635,6 +657,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `re-export SYSTEMS`
 - `re-export ABILITIES`
 - `const abilityScores`
+- `const EXHAUSTION_MAX` — The tallest exhaustion ladder a character may carry.
 - `type DeathCause`
 - `const SHORT_REST_MODES` — Short-rest healing model (per-character rules variant): `dice` = RAW Hit-Dice spend, `half` = the * ½-max-HP video-ga…
 - `type ShortRestMode`
@@ -701,12 +724,12 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `interface DamageSensitivities` — The sheet's damage defenses (from `damage_sensitivity` effects) — the three buckets by damage type.
 - `type SensitivityBucket` — Which bucket, if any, a damage type hits.
 - `function applyDamageSensitivity` — * Apply resist/immune/vulnerable to a raw damage amount given its type (B20).
-- `function effectiveHpMax`
 
 ### `src/lib/combat/effects-view.ts`
 
 - `re-export EffectInstance` — A runtime effect instance — the character-schema type, re-exported for the combat views.
 - `function why` — Provenance trace of a Computed → a human-readable "why" string for tooltips.
+- `function whyPassive` — `why` for a passive score, with the sentence that says what a passive score is on top of it.
 - `function effectTag` — A bounded-vocab effect token → a short readable tag for the effects panel: * flat_bonus → "AC +2" / "saves +1d4"; set…
 - `function effectTagResolved` — Panel tag for a token, preferring the DERIVE-RESOLVED value when the token's value is an L2 * EXPRESSION — `effectTag…
 - `interface DerivedEffectGroup` — One source's derived contributions, as short display tags (B14).
@@ -759,11 +782,18 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `interface RollEffects` — What a roll target (e.g.
 - `const NO_ROLL_EFFECTS`
 - `function rollEffectsFor`
+- `const skillRollTarget` — What a skill check rolls AS: its effect key plus the scopes that narrow which effects apply.
 - `const dieModsOf` — Just the roll-MANIPULATION half of a `RollEffects` — the `DieMods` a die carries.
 - `const AUTO_OUTCOME` — The two outcomes a condition can force in place of a roll.
 - `type AutoOutcome`
 - `function autoOutcome` — A forced roll outcome for `key`, or null to roll normally.
 - `const netAdvantage` — Advantage + disadvantage cancel to a straight roll (5e rule) → the −1/0/+1 the roller takes.
+
+### `src/lib/combat/row-order.ts`
+
+- `const ROW_PANEL` — The panels that keep a stored row order — compared against these, never a bare string.
+- `function orderRows` — Sort `rows` by a saved order, keeping anything unnamed in its own order at the end.
+- `function movedOrder` — The order after moving one row a step — `-1` up, `1` down.
 
 ### `src/lib/combat/spells.ts`
 
@@ -888,6 +918,12 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function linkedRowsOf` — * The rows of `parent`'s linked table, in reading order.
 - `function linkedPrefill` — The draft a new linked row starts from: the joins the user cannot guess, plus the parent's * editions and whatever th…
 
+### `src/lib/content/loader-validate.ts`
+
+- `function collectTranslationGaps` — * Content-health: flag rows that are PARTIALLY translated into a locale — some `<base>_<loc>` prose is * filled but a…
+- `function validateSpellListJoins` — Validate additive spell_lists joins: an unknown class_id/spell_id (no such row in the row's * edition) is likely a ty…
+- `function validateItemTags` — Validate what folding item columns into `tags` took away from zod: a numeric tag's value, and the * existence of the …
+
 ### `src/lib/content/loader.ts`
 
 - `interface LoadedRowOf` — A loaded row of a KNOWN content type `T`: the common identity + the zod-validated, coerced model * for `T` (Spell, Mo…
@@ -895,6 +931,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `const rowName` — A row's English name — the label a trace, toast or list shows.
 - `const tokensOf` — A row's bounded-vocab effect tokens (empty for lookup tables, which carry no `effects` column).
 - `type LoadedRowByType` — The loaded-row member(s) for a type `T`.
+- `interface ContentIssue`
 - `interface ContentGraph`
 - `const LOCALE_TAG` — A BCP-47-ish locale code (guardrail vs phantom locales): a 2–3 letter base + optional subtags * (`pt-BR`).
 - `interface ContentSource` — One content root paired with the storage it lives in.
@@ -1136,6 +1173,12 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function openLogDir` — Desktop only: reveal the rotating log-file folder (OS app-log dir) in the file manager, so a user * can attach the fu…
 - `function captureGlobalErrors` — Route otherwise-lost uncaught errors + unhandled rejections into the logger.
 
+### `src/lib/dice/roll-lines.ts`
+
+- `interface LineRoll` — Everything a roll needs that is not a line: what it is called, what it says it came from, and the * table's crit rule.
+- `function damageSpecsOf` — The damage the lines describe, as the specs `rollLines` throws.
+- `function rollLines` — Roll the lines — one entry per instance of a volley.
+
 ### `src/lib/dice/roll-toast.ts`
 
 - `interface RollToastDamage` — One damage type inside an attack: its glyph key, the dice it rolled (a crit's doubled dice ride * ONE pill, divided),…
@@ -1177,6 +1220,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `type ParsedRollerToken`
 - `function parseRollerToken` — * One token → what it means.
 - `function pillsFromPool` — * A dice pool + modifier (+ its damage type, its roll-manipulation facts, its effect dice) → the * pills that describ…
+- `const dicePillToken` — * The TOKEN a dice pill is spelled as — its `text`, which is what unfolding the pill puts back in the * draft.
 - `function normalizeLine` — * Re-derive the line's implicit parts after an edit.
 - `const countPill` — The volley pill for a roll the app already knows fires N times (Eldritch Blast's beams) — the * same pill typing `×3`…
 - `const isInherited` — A pill `normalizeLine` DERIVED rather than one that was typed.
@@ -1211,6 +1255,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 ### `src/lib/effects/action-token.ts`
 
 - `function resolveActionFormula` — Resolve the L2 values inside an action token.
+- `function actionFormulas` — Every L2 expression slot inside an action token (a `;`-separated multi-action carries one per verb).
 
 ### `src/lib/effects/apply.ts`
 
@@ -1303,7 +1348,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `interface PluginEvaluator`
 - `function registerPluginEvaluator` — Install the evaluator (the sandbox host, once ≥1 plugin is enabled).
 - `function clearPluginEvaluator` — Remove the evaluator (kill switch / module teardown) — plugin tokens degrade to notes.
-- `function clearPluginMemo` — Test/teardown helper: drop all memoized results + failure counts.
+- `function clearPluginMemo` — Drop all memoized results + failure counts.
 - `interface PluginExpansion`
 - `function expandPluginEffects` — * Resolve every `plugin:` token in the resolved effect list — once per DISTINCT token (memoized), * applied once per …
 
@@ -1401,6 +1446,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function maxHpForClass` — Max HP for one class (SRD fixed values).
 - `function fullCasterSlots` — Full-caster spell slots per spell level (index 0 = 1st) at a given caster level.
 - `function carryingCapacity` — Carrying capacity in pounds = STR × 15.
+- `function effectiveHpMax`
 
 ### `src/lib/rules/currency.ts`
 
@@ -1411,6 +1457,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `const coinCount` — How many coins in total, of every denomination — what the weight is computed from.
 - `const purseWeightLb` — What the purse weighs, in pounds.
 - `const purseInCopper` — The purse's total value in copper — what "can I afford this" is answered with, and what an * exchange reference is wr…
+- `const costSaid` — * An item's `cost` column as a sentence to be said later: "15 gp" → 15 + the reader's word for gold.
 
 ### `src/lib/rules/dice.ts`
 
@@ -1436,7 +1483,8 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `const MAX_DICE_PER_TERM` — Cost caps (not game balance): a dice term drives a roll loop + a string build, so an untrusted * formula (shared cont…
 - `const MAX_DIE_SIDES`
 - `function parseDiceTerm` — Parse a single signed dice term ("1d4" / "-2d4" / "+d6") into a `BonusDie`, or null if it isn't * one.
-- `function parseDicePool` — Parse every dice term in a string into a pool ({sides: count}).
+- `function parseSignedDice` — Every dice term of a string, split by its sign: the added ones as a pool ({sides: count}), the * SUBTRACTED ones as s…
+- `const parseDicePool` — The ADDED dice terms of a string as a pool.
 - `function parseFlatModifier` — * The flat modifier of a formula or damage segment: EVERY signed term that is not part of a die, * summed.
 - `interface ParsedFormula` — A formula, fully accounted for: the pool, the flat modifier, and every fragment that is NEITHER.
 - `function parseFormula` — * Parse a formula into what it rolls plus what it could not account for.
@@ -1456,6 +1504,8 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `const SYSTEMS` — The two supported rule systems — the ONE owner (AUDIT F7/D2).
 - `type System`
 - `const SYSTEM_LABELS` — What a system is CALLED to a user — never the raw id in prose (AGENTS.md ▸ A small glossary (source)).
+- `const SYSTEM_SHORT_LABELS` — The same name where the full one will not fit — a roster badge, a segmented switch.
+- `function systemShortLabel` — …for the callers holding a plain `string`: a draft summary reads its system out of a file the * user can edit, so an …
 - `const DEFAULT_SYSTEM` — The system a NEW character/draft starts in when nothing says otherwise.
 - `type Layer` — Where a stat's math comes from, in pipeline order.
 - `interface Contribution`
@@ -1535,7 +1585,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function readConfigFile` — The whole file as a plain object — `{}` when it is missing, unreadable, or not a JSON object.
 - `function readConfigSection` — One section, or `undefined` when absent.
 - `function writeConfigSection` — * Replace one section, preserving every other key in the file.
-- `function configWritesSettled` — Resolves when every queued write for this file has landed.
+- `function configWritesSettled` — Resolves when every queued write has landed — for one file, or (no argument) for all of them.
 
 ### `src/lib/storage/memory.ts`
 
@@ -1575,6 +1625,7 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function currentDataDir` — The active data dir (the saved choice or the default) — for display in settings.
 - `function pickTargetDataDir` — Open the folder picker and propose `<picked parent>/charnik` as the move target.
 - `function openDataDir` — Open the active data folder in the OS file manager (shows content/ + characters/).
+- `function openExternalUrl` — Hand an external URL to the OS browser.
 - `function repointDataDir` — Persist a chosen data folder WITHOUT moving anything — "just read from here now".
 - `function dirIsEmpty` — True when `dir` has no entries (or doesn't exist yet) — the precondition for an automatic move.
 - `function listDataDirFiles` — The current data folder's files — for the merge dialog's name table (see docs/plan.md).
@@ -1636,6 +1687,13 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function externalLinkToOpen` — * What to do with a click on `href` from a page served at `origin`: * - a URL string → open it in the OS browser (and…
 - `function shouldCancelNavigation` — …and whether the click must be CANCELLED even when nothing gets opened.
 
+### `src/lib/util/option-walk.ts`
+
+- `interface KeyPress` — All a walk needs from a key event.
+- `interface OptionWalk`
+- `function walkOptions` — Handle a key, or leave it alone.
+- `const optionDomId` — * A stable DOM id for one option, so the search box can name the highlighted one through * `aria-activedescendant` — …
+
 ### `src/lib/util/persist.ts`
 
 - `function readStored` — Read + JSON-parse a localStorage key.
@@ -1663,4 +1721,4 @@ A shared class lives in exactly ONE place. Reuse before making a scoped lookalik
 - `function didYouMean` — The suffix to append to an error reason: ` — did you mean "x" or "y"?`, or '' if nothing is * close.
 
 ---
-_47 tokens · 80 global classes · 53 components · 993 exports across 134 modules · 65 duplicate suspects._
+_47 tokens · 81 global classes · 53 components · 1027 exports across 140 modules · 70 duplicate suspects._

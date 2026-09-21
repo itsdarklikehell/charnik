@@ -31,8 +31,15 @@ SEARCH is article-only (`isBrowsable`), so the palette never answers a spell que
 A row's effective identity is **`type:source:id`**, so the same `id` from two different sources
 coexists and both remain addressable. An exact clash *within one source* is a real error. The **type**
 scopes it because slugs are unique per type and not globally: `shield` is both a spell and an item,
-so `source:id` alone would collide. Links (class → features, character → content) and the loader's
-`byEffectiveId` all use the full key.
+so `source:id` alone would collide. A character → content reference and the loader's `byEffectiveId`
+use the full key.
+
+**A content → content link is a BARE id, on purpose, and that is the extension point.** `class_id`,
+`subclass_id` and `species_id` match on the id plus the edition and NEVER on the source
+(`character/derive-gather.ts`), and the shipped rows spell them that way — `subclasses_srd.csv` carries
+`barbarian`, not `class:SRD 5.2.1:barbarian`. That is what lets a homebrew or third-party pack add a
+feature, a subclass or a species option to an SRD class without forking the class row. "Fixing" one of
+these into a full-key comparison would break every pack that extends shipped content.
 
 Duplicate-group resolutions (keep one, keep all) live in a separate **`collisions.json`** — never in
 `charnik.config.json`, because a decision *between* sources cannot live inside one of them without
@@ -193,7 +200,9 @@ Two things follow, and both are easy to forget:
 
 1. **Bump `CONTENT_SEED_VERSION`** whenever the shipped set of files changes. A new file is the
    easiest case to miss, because nothing about the existing files looks stale — and without the bump
-   a desktop install seeded at the old version never receives it.
+   a desktop install seeded at the old version never receives it. The bump is no longer a thing to
+   remember: `content_stamps.test.ts` pins the shipped set's signature beside the constant, so content
+   that moved without it fails there. Paste the new signature in with the bump.
 2. **Do not declare `#content-type:` on a file whose type is new.** Left to the filename, an older
    build reports a warning and skips one file; declared explicitly, the same build reports an error.
    Both skip it, so the quieter one is the kinder one.
@@ -215,9 +224,11 @@ Writes are **atomic** (temp then rename) and encoded **UTF-8 with BOM, CRLF line
 opens Cyrillic correctly. Rows are serialized with `papaparse.unparse` from the same forms the user
 fills in — nobody is ever required to open a file by hand.
 
-The file watcher **ignores the app's own writes**, or a write triggers a reload which triggers a
-write. A CSV edited directly on disk is picked up in real time; only the changed file is reparsed,
-and a manual refresh is the fallback.
+The file watcher does **not** suppress the app's own writes, and does not need to: `reloadContent()`
+only reads, so a homebrew save costs at worst one redundant re-read. The one callback that does write
+back, `autoAdoptDrift`, terminates because a re-stamped file no longer drifts. A CSV edited directly
+on disk is picked up in real time; only the changed file is reparsed, and a manual refresh is the
+fallback.
 
 Note the asymmetry with the content repo: the converters write **LF and no BOM** on purpose
 (`tools/srd/lib.mjs`). BOM and CRLF are for CSVs the app writes into the user's data folder.

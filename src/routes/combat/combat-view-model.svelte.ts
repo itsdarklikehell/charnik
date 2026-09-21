@@ -10,9 +10,10 @@
 import { toast } from 'svelte-sonner';
 import { t, translator } from '$lib/i18n';
 import { app } from '$lib/stores/app.svelte';
-import { ensureActiveCharacter, saveCharacterToStore } from '$lib/character/store.svelte';
+import { ensureActiveCharacter, saveCharacterGuarded } from '$lib/character/store.svelte';
 import { content, loadContentStore } from '$lib/content/store.svelte';
 import { deriveSheet, type CharacterSheet, type SkillId } from '$lib/character/derive';
+import { localizedName } from '$lib/content/detail';
 import { plugins } from '$lib/effects/plugin-store.svelte';
 import { DEFAULT_SYSTEM } from '$lib/rules/pipeline';
 import type { Character, ShortRestMode } from '$lib/character/schema';
@@ -25,6 +26,7 @@ import {
 	buildSpellGroups,
 	preparedTalliesByClass,
 	modTargetLabel,
+	skillRollTarget,
 	type Attack,
 	type StandardAction,
 } from '$lib/combat/helpers';
@@ -84,9 +86,12 @@ class CombatVM {
 		(e) => this.persistRevision(e),
 	);
 	/** Panel-layout subsystem (columns, collapse, drag) — persists column order onto the character. */
-	layout = new PanelLayout((cols) => {
-		if (this.character) this.character.ui.panelColumns = cols;
-	});
+	layout = new PanelLayout(
+		(cols) => {
+			if (this.character) this.character.ui.panelColumns = cols;
+		},
+		() => this.character?.ui.rowOrder,
+	);
 	/** Action-economy subsystem (pips, movement, turn/round, in-combat spend checks). */
 	economy = new TurnEconomy(
 		() => this.character,
@@ -149,6 +154,7 @@ class CombatVM {
 	setTempHp = () => this.hp.setTempHp();
 	clampCurrentHp = () => this.hp.clampCurrentHp();
 	syncDyingState = () => this.hp.syncDyingState();
+	syncPendingConcentration = () => this.hp.syncPendingConcentration();
 	rollConcentrationSave = () => this.hp.rollConcentrationSave();
 	dropConcentrationFromSave = () => this.hp.dropConcentrationFromSave();
 	dismissConcentrationSave = () => this.hp.dismissConcentrationSave();
@@ -234,27 +240,25 @@ class CombatVM {
 	get round(): number {
 		return this.character?.play.round ?? 0;
 	}
-	// B19: any round-timed effect currently ticking. Gates the out-of-combat "pass time" control — a
-	// timed buff cast outside a fight has no turn advance to expire it, so it'd hang until a rest.
-	hasTimedEffects = $derived(
-		(this.character?.play.effects ?? []).some((e) => e.durationRounds != null),
-	);
 	/** Pools that come back at dawn / at dusk — each gates its own control in the time bar, so a
-	 *  character with no such pool never sees a button that would do nothing. */
+	 *  character with no such pool never sees a button that would do nothing. The STEPS are not gated
+	 *  the same way: passing time always advances the round counter and always expires whatever is
+	 *  ticking, so the control is never a no-op — and a bar that appeared and vanished as buffs came
+	 *  and went was a control the player could not ask for when they wanted it. */
 	hasDawnPool = $derived(this.resources.hasBoundaryPool('dawn'));
 	hasDuskPool = $derived(this.resources.hasBoundaryPool('dusk'));
-	/** Is there anything out of combat that the passage of time DOES something to? */
-	showTimeBar = $derived(this.hasTimedEffects || this.hasDawnPool || this.hasDuskPool);
-	// D3: pins persist per character in ui.spellsPinned (bare ids), not a demo hardcode. Exposed as a
-	// boolean map for the panel's `pinned[id]` lookup; toggle via togglePin so the array stays the source.
+	// D3: pins persist per character in ui.spellsPinned, keyed by the spell's REF the way
+	// `spellsHidden` is — a bare id pinned every same-id spell from every pack at once, and the eye one
+	// row over disagreed about what a spell is. Exposed as a boolean map for the panel's lookup;
+	// toggle via togglePin so the array stays the source.
 	pinned = $derived<Record<string, boolean>>(
-		Object.fromEntries((this.character?.ui.spellsPinned ?? []).map((id) => [id, true])),
+		Object.fromEntries((this.character?.ui.spellsPinned ?? []).map((ref) => [ref, true])),
 	);
-	togglePin = (id: string) => {
+	togglePin = (ref: string) => {
 		const ui = this.character?.ui;
 		if (!ui) return;
 		const cur = ui.spellsPinned ?? [];
-		ui.spellsPinned = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+		ui.spellsPinned = cur.includes(ref) ? cur.filter((x) => x !== ref) : [...cur, ref];
 	};
 	hiddenActions = $state<Record<string, boolean>>({});
 	customEffectLabel = $state('');
@@ -372,22 +376,23 @@ class CombatVM {
 		return classes
 			.map((c) => {
 				const row = graph.get(c.class);
-				return row ? `${row.data.name_en} ${c.level}` : `Level ${c.level}`;
+				return row ? `${localizedName(row, app.activeLocale)} ${c.level}` : `Level ${c.level}`;
 			})
 			.join(' / ');
 	});
-	speciesName = $derived.by(() =>
-		this.character?.build.species && this.graph
-			? String(this.graph.get(this.character.build.species)?.data.name_en ?? '')
-			: '',
-	);
+	speciesName = $derived.by(() => {
+		const row = this.character?.build.species
+			? this.graph?.get(this.character.build.species)
+			: undefined;
+		return row ? localizedName(row, app.activeLocale) : '';
+	});
 	/** The spell currently concentrated on (resolved to a display label), or null. Reads the schema's
 	 *  `play.concentration` ref — set on cast, cleared by tapping the indicator. */
 	conc = $derived.by<{ ref: string; label: string } | null>(() => {
 		const ref = this.character?.play.concentration;
 		if (!ref) return null;
-		const name = this.graph?.get(ref)?.data.name_en;
-		return { ref, label: name ? String(name) : ref };
+		const row = this.graph?.get(ref);
+		return { ref, label: row ? localizedName(row, app.activeLocale) : ref };
 	});
 	/** Remove the cast-applied effect linked to a spell ref (`source === ref`) — dropping or
 	 *  replacing concentration takes the spell's own buff down with it. */
@@ -442,7 +447,7 @@ class CombatVM {
 		if (!c) return;
 		const cur = this.passiveSkills;
 		c.ui.passiveSkills = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
-		void saveCharacterToStore(c);
+		void saveCharacterGuarded(c);
 	};
 
 	// --- level-up: advance an existing character's class by one level ---------------------------
@@ -450,12 +455,19 @@ class CombatVM {
 	totalLevel = $derived(this.character?.build.classes.reduce((n, c) => n + c.level, 0) ?? 0);
 	/** Can still gain a level (hard cap 20 total). */
 	canLevelUp = $derived(this.totalLevel < 20 && (this.character?.build.classes.length ?? 0) > 0);
+	/** A ref's display name in the active locale, or `fallback` when the row is gone. The sheet reads a
+	 *  content name the way every other surface does (F9) — printing `name_en` made the same dagger two
+	 *  different words on one screen. */
+	private nameOf(ref: string, fallback: string): string {
+		const row = this.graph?.get(ref);
+		return row ? localizedName(row, app.activeLocale) : fallback;
+	}
 	/** The character's classes with their live names, for the level-up menu. */
 	levelUpClasses = $derived.by(() =>
 		(this.character?.build.classes ?? []).map((c, i) => ({
 			index: i,
 			level: c.level,
-			name: this.graph ? String(this.graph.get(c.class)?.data.name_en ?? 'Class') : 'Class',
+			name: this.nameOf(c.class, 'Class'),
 		})),
 	);
 	/** Click a standard action (Dash, Hide, …). Spends an action; roll-type ones open their roll,
@@ -464,8 +476,16 @@ class CombatVM {
 		if (a.id === 'attack') return; // routes to the Attacks panel; not itself an action spend
 		if (!this.economy.trySpend('action')) return;
 		// the roll's NAME is a key: a standard action is a closed rules vocabulary, so its check reads
-		// in the language the log is READ in rather than the one it was made in
-		if (a.roll) this.rolls.roll({ text: t(a.roll[0]), key: a.roll[0] }, a.roll[1], e);
+		// in the language the log is READ in rather than the one it was made in. Its TARGET is the skill
+		// it checks — Hide is a Stealth check, and it must roll the way the skills panel's Stealth row
+		// does or the same check rolls two ways depending on which panel you tapped.
+		if (a.roll)
+			this.rolls.roll(
+				{ text: t(a.roll[0]), key: a.roll[0] },
+				a.roll[1],
+				e,
+				a.skill ? skillRollTarget(a.skill, this.sheet) : undefined,
+			);
 		else toast(t('combat.notice.actionUsed', { name: t(a.nameKey) }));
 	};
 	/** Spell casting (slots, upcast, the rolls a cast makes) — see casting.svelte.ts. */
@@ -514,6 +534,7 @@ class CombatVM {
 					groupBy: this.spellGroupBy,
 					pinned: this.pinned,
 					hidden: this.character.ui.spellsHidden,
+					locale: app.activeLocale,
 				})
 			: [],
 	);

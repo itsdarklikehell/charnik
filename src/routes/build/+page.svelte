@@ -8,6 +8,7 @@
 	// Shared builder CSS lives in $lib/styles/build.css (confined to `.build-page`); block-local CSS
 	// stays scoped inside its block.
 	import { goto, afterNavigate } from '$app/navigation';
+	import { toast } from 'svelte-sonner';
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { build } from './build-view-model.svelte';
@@ -104,16 +105,23 @@
 	// There is no leave guard any more. It existed because walking away lost the build; the draft is
 	// now on disk and waiting in the roster, so a dialog saying otherwise would simply be wrong.
 	async function create() {
+		const wasEdit = Boolean(build.edit);
 		const id = await build.save();
 		if (!id) return;
+		// a save that only navigates leaves the player guessing whether it took — the failure path has
+		// said so all along, and the success path said nothing (playtest feedback)
+		toast.success($_(wasEdit ? 'build.notice.saved' : 'build.notice.created'));
 		void goto(`${base}/combat`);
 	}
 </script>
 
 <svelte:head><title>{$_('nav.build')} — Charnik</title></svelte:head>
 
-{#if content.error}
-	<!-- A content-load failure was silent here (empty pickers) — surface it like other views. -->
+{#if !build.graph}
+	<!-- A content-load failure was silent here (empty pickers) — surface it like other views. The gate
+	     is a MISSING graph, not `content.error`: a FAILED REFRESH leaves the working graph in place and
+	     sets the error beside it, and blanking the builder mid-build over a transient listing failure
+	     is the one screen a user cannot afford to lose. The error still renders, as a reason. -->
 	<Loading error={content.error} />
 {:else}
 	<section class="page build-page">
@@ -185,8 +193,11 @@
 		align-items: start;
 	}
 	@media (max-width: 900px) {
+		/* minmax(0, …) rather than a bare 1fr: a bare one floors at the track's min-content, so the
+		   widest card in the pair set a floor the phone viewport could not meet and the whole sheet
+		   overflowed sideways. */
 		.sheet-pair {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	/* A fixed-height box, NOT a scroll container: a wheel goes to the innermost scrollable ancestor
@@ -208,7 +219,7 @@
 			height: auto;
 		}
 		.split {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 		.sheet,
 		.inspector {

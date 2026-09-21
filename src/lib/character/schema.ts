@@ -50,6 +50,12 @@ const classEntry = z.object({
 	rowId: z.string().optional(),
 });
 
+/** The tallest exhaustion ladder a character may carry. The DATA owns the real ceiling (a condition
+ *  row's `max_level`), so this is only the sanity bound the save schema validates against — but the
+ *  stepper has to know it, because a level the schema refuses is a character that can never be saved
+ *  again and nothing would say so. */
+export const EXHAUSTION_MAX = 20;
+
 const inventoryEntry = z.object({
 	item: ref,
 	qty: z.number().int().min(1).default(1),
@@ -117,6 +123,12 @@ const buildSchema = z.object({
 	slotPicks: slotPicksSchema.default({ feats: {}, asi: {}, featAbility: {}, featSkills: {} }),
 	/** Known languages, as `language:source:id` refs. */
 	languages: z.array(ref).default([]),
+	/** Languages and tools the player simply TYPED — a table's own tongue, a trade the SRD never
+	 *  listed. Free text and not refs, because neither interacts with any rule the app computes: a
+	 *  language and a tool proficiency are flavour a sheet prints. A row in a pack would be machinery
+	 *  for a string, and the day either gains a mechanic is the day it earns one. */
+	customLanguages: z.array(z.string()).default([]),
+	customTools: z.array(z.string()).default([]),
 	inventory: z.array(inventoryEntry).default([]),
 	spells: z.array(spellEntry).default([]),
 	/** Photo file name (sibling of character.json — NOT base64 in the JSON). */
@@ -170,9 +182,6 @@ const playSchema = z.object({
 	effects: z.array(effectInstance).default([]),
 	/** Spell ref currently concentrated on, or null. */
 	concentration: ref.nullable().default(null),
-	/** Shield raised (don/doff in one tap) → +2 AC live. The single source of truth for the
-	 *  shield's AC contribution (not the inventory equipped flag). */
-	shieldRaised: z.boolean().default(false),
 	/** Effects-auto engine on. Off → derived stats drop their effect layers (flat bonuses,
 	 *  advantage, conditions) and show base values only (docs/plan.md effects global toggle). */
 	autoCalc: z.boolean().default(true),
@@ -189,8 +198,9 @@ const playSchema = z.object({
 		.default(null),
 	/** Exhaustion level. The real ceiling is DATA (the exhaustion condition row's `max_level`, 6 in
 	 *  both editions) and the stepper clamps to it; this is only a generous sanity bound so a homebrew
-	 *  ladder taller than 6 still validates (D19). */
-	exhaustion: z.number().int().min(0).max(20).default(0),
+	 *  ladder taller than 6 still validates (D19). The stepper clamps to `EXHAUSTION_MAX` as well —
+	 *  above it a character validates nowhere and every later save throws, silently. */
+	exhaustion: z.number().int().min(0).max(EXHAUSTION_MAX).default(0),
 	/** Whether the action-economy is being tracked. Off → no turnbar, no action/bonus/reaction
 	 *  enforcement (rolls always go through); on → attacks/spells spend their slot and are blocked
 	 *  when the slot is exhausted. */
@@ -209,12 +219,24 @@ const playSchema = z.object({
 			 *  do not un-spend what was used. A one-turn fact rather than an effect, so it survives with
 			 *  effects-auto off and dies with the turn. Absent on saves written before it existed → 0. */
 			grantedActions: z.number().int().min(0).default(0),
+			/** Strikes made inside the Attack action this turn. Extra Attack buys several strikes for one
+			 *  Action, so the slot is charged on every `attacksPerAction`-th strike rather than on each
+			 *  one. Absent on saves written before it existed → 0. */
+			attacksMade: z.number().int().min(0).default(0),
 			/** Feature rollables the player has marked as USED this turn (Sneak Attack's once-per-turn).
 			 *  Marked by hand, never by rolling: most granted rolls have no per-turn limit, and a marker
 			 *  that appeared on its own would invent one. Turn-scoped, so `Next turn` clears it. */
 			usedRolls: z.array(z.string()).default([]),
 		})
-		.default({ action: 0, bonus: 0, reaction: 0, move: 0, grantedActions: 0, usedRolls: [] }),
+		.default({
+			action: 0,
+			bonus: 0,
+			reaction: 0,
+			move: 0,
+			grantedActions: 0,
+			attacksMade: 0,
+			usedRolls: [],
+		}),
 });
 
 // --- ui / per-character view preferences --------------------------------------
@@ -229,14 +251,19 @@ const uiSchema = z
 	.object({
 		/** Combat-sheet panel layout: one array of panel ids per column (left, right). */
 		panelColumns: z.array(z.array(z.string())).optional(),
+		/** A player's own order for the rows INSIDE a panel, keyed by panel id. Only the panels whose
+		 *  rows are derived need it — the inventory's order is its own array. Reconciled against the
+		 *  rows that exist on every read (`combat/row-order.ts`). */
+		rowOrder: z.record(z.string(), z.array(z.string())).default({}),
 		/** Build/edit mode for THIS character: Strict enforces its system's rules, Free lifts them.
 		 *  Stored per character (not a global setting), Strict by default. */
 		strict: z.boolean().default(true),
 		/** Spells the user hid from the combat sheet via the spellbook's eye toggle (effectiveIds,
 		 *  `source:id`). Additive: absent → shown. The combat spell list filters these out. */
 		spellsHidden: z.array(z.string()).default([]),
-		/** Spells pinned to the top of the combat spell list (bare spell ids — the combat key format;
-		 *  D3). Absent → nothing pinned; per character, no demo default. */
+		/** Spells pinned to the top of the combat spell list, by full ref (`spell:source:id`) — the same
+		 *  identity `spellsHidden` uses, so the star and the eye agree about what a spell is (D3). A save
+		 *  written with bare ids simply pins nothing until the star is tapped again. */
 		spellsPinned: z.array(z.string()).default([]),
 		/** Which skills show in the passive-senses row (Pin skills). Absent → the default trio
 		 *  (Perception / Investigation / Insight). Stored per character, not a global. */
@@ -260,6 +287,7 @@ const uiSchema = z
 		shortRestMode: 'dice',
 		coinsHidden: [],
 		coinWeight: false,
+		rowOrder: {},
 	});
 
 // --- character ----------------------------------------------------------------

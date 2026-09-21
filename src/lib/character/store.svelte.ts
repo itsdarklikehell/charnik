@@ -4,6 +4,8 @@
  * charnik-guid-not-counter). Persistence goes through the repository over the runtime writable
  * Storage (`getUserStorage()`), so the same code works on web (IndexedDB) and Tauri (fs).
  */
+import { toast } from 'svelte-sonner';
+import { t } from '$lib/i18n';
 import { getUserStorage } from '$lib/storage/provider';
 import {
 	saveCharacter,
@@ -11,6 +13,8 @@ import {
 	listCharacters,
 	deleteCharacter,
 	type RosterEntry,
+	restoreCharacterBackup,
+	type LoadResult,
 } from './repository';
 import type { Character } from './schema';
 import type { Storage } from '$lib/storage/types';
@@ -103,11 +107,54 @@ export async function openCharacter(slug: string): Promise<Character | null> {
 	return characters.active;
 }
 
-/** Persist a character (create or update) and refresh the roster. */
+/** Persist a character (create or update) and refresh the roster. THROWS on a failure — the two
+ *  callers that can act on one (Create, the reload flusher) want it; everything on the play loop goes
+ *  through `saveCharacterGuarded` instead. */
 export async function saveCharacterToStore(character: Character): Promise<void> {
 	await saveCharacter(getUserStorage(), character);
 	if (characters.active?.id === character.id) characters.active = character;
 	await loadRoster();
+}
+
+/** One id for the failure, so a disk that stays full replaces its notice instead of stacking one per
+ *  HP tick. Same pattern as the draft autosave's. */
+const SAVE_FAILED_TOAST = 'character-save-failed';
+
+/**
+ * Persist a character and SAY SO when it does not happen. Every play-loop write — the combat
+ * autosave, a rest, a spell prepared, a pin — used to be `void saveCharacterToStore(c)`, so a locked
+ * `character.json` or a character the schema refuses (an exhaustion ladder past 20) stopped persisting
+ * for the whole session in silence, and the next load returned the sheet as it was before the failure.
+ *
+ * Returns whether it landed, for the few callers that care; the rest fire and forget, which is now
+ * safe because the failure has a channel of its own.
+ */
+export async function saveCharacterGuarded(character: Character): Promise<boolean> {
+	try {
+		await saveCharacterToStore(character);
+		return true;
+	} catch {
+		toast(t('character.notSaved'), {
+			id: SAVE_FAILED_TOAST,
+			description: t('character.notSavedBody'),
+		});
+		return false;
+	}
+}
+
+/**
+ * Put one of a character's snapshots back as its live save, and make what is on screen agree.
+ *
+ * Reloads the roster (the name and level may have moved) and re-opens the character when it is the
+ * active one — leaving the in-memory sheet from before the restore would show one state while the
+ * disk holds another, and the next autosave would write the stale one straight back over it.
+ */
+export async function restoreBackup(slug: string, path: string): Promise<LoadResult> {
+	const res = await restoreCharacterBackup(getUserStorage(), slug, path);
+	if (!res.ok) return res;
+	if (characters.active?.id === slug) characters.active = res.character ?? null;
+	await loadRoster();
+	return res;
 }
 
 /** Delete a character and refresh the roster. */
