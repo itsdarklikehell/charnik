@@ -2,51 +2,69 @@ name: Gource visualisation
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   gource:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       actions: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Gource
-        uses: nbprojekt/gource-action@v1
+        uses: nbprojekt/gource-action@57256d303c5a9a5e72ed92ba13e3e83c5ec8b257 # v1.3.0
         with:
           gource_opts: >-
-            --max-files 1000
+            --max-files 1500
             --key
-            -800x600
+            -1920x1080
             --highlight-users
             --filename-time 3
-            --output-framerate 25
-            -s 0.6
+            --output-framerate 30
+            -s 0.4
             --multi-sampling
             --auto-skip-seconds 0.1
             --stop-at-end
-            --hide mouse,progress
+            --hide mouse,progress,date,filenames
             --title charnik
           video_codec: libx264
           video_quality: '1'
 
-      - name: Upscale + re-encode
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Create 720p README variant
         run: |
           ffmpeg -y -i ./gource/gource.mp4 \
-            -c:v libx264 -crf 19 -level 3.1 -preset slow -tune film \
-            -filter:v "scale=-1:720" -sws_flags lanczos \
-            -c:a aac -b:a 128k \
-            ./output.mp4
+            -c:v libx264 -crf 20 -preset fast \
+            -vf "scale=-2:720" -sws_flags lanczos \
+            -c:a aac -b:a 128k -movflags +faststart \
+            ./gource-720p.mp4
 
-      - name: Upload final video
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: charnik-gource
-          path: ./output.mp4
+          name: charnik-gource-1080p
+          path: ./gource/gource.mp4
+      - name: Upload 720p artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: charnik-gource-720p
+          path: ./gource-720p.mp4
+
+      - name: Commit gource videos
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gource/gource.mp4 gource-720p.mp4 || true
+          git diff --staged --quiet || git commit -m "ci: update gource visualization (automated)"
+          git push
