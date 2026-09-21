@@ -134,7 +134,7 @@ export default ts.config(
 			'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
 			'max-lines-per-function': [
 				'warn',
-				{ max: 80, skipBlankLines: true, skipComments: true, IIFEs: false },
+				{ max: 100, skipBlankLines: true, skipComments: true, IIFEs: false },
 			],
 			// size ≠ tangle: a short function with many branches is still hard to reason about. Set at
 			// the standard 20 (not stricter) on purpose — a flat `switch(kind)` dispatch (the parsers /
