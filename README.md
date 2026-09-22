@@ -63,7 +63,9 @@ builds simply don't auto-update.
 
 De ontwikkelhistorie van dit project in een film:
 
-<video src="https://raw.githubusercontent.com/itsdarklikehell/charnik/main/gource-720p.mp4" controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/itsdarklikehell/charnik/main/gource/charnik-gource.mp4" controls width="100%"></video>
+
+[ ![Gource Preview](./gource/charnik-gource.png) ](./gource/charnik-gource.mp4)
 
 *De video wordt automatisch gegenereerd door de [Gource workflow](.github/workflows/gource.yml) bij elke push — rendered via [nbprojekt/gource-action@v1.3.0](https://github.com/marketplace/actions/gource-action) in 1080p. Het artifact is 30 dagen beschikbaar via Actions.*
 

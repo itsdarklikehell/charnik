@@ -64,3 +64,4 @@ tools/visual/current/
 # dated QA reports are working checklists, never history
 docs/report-*.md
 gource.mp4
+gource/ppm.ppm
