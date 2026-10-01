@@ -83,3 +83,16 @@ Charnik separates **code**, **bundled data**, and **user content** — see
   yourself into homebrew CSVs.
 - **Your homebrew → yours.** Content you add stays author-owned; each `source` carries its
   own license + attribution. The app relicenses nothing.
+
+## :film_projector: Development visualization
+
+Bekijk de [Gource development video](https://github.com/itsdarklikehell/charnik/releases) voor een visuele tijdlijn van de projectgeschiedenis.
+
+Om de video lokaal te genereren:
+```bash
+gource -1920x1080 --auto-skip-seconds 1 -o gource.ppm
+ffmpeg -y -r 60 -i gource.ppm -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p gource.mp4
+```
+
+De GitHub Actions workflow (`.github/workflows/gource.yaml`) genereert de video automatisch bij elke release.
+
