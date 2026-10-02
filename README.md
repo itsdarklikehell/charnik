@@ -1,5 +1,11 @@
 # Charnik
 
+
+[![CI](https://github.com/itsdarklikehell/charnik/actions/workflows/ci.yml/badge.svg)](https://github.com/itsdarklikehell/charnik/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/itsdarklikehell/charnik)](LICENSE)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+
+
 A free, self-hostable, standalone **D&D 5e (2014) + 5.5e (2024)** character **tracking**
 system — not just a generator. Three roles in one app: **build & level-up**, **play
 tracking** (HP, slots, resources, conditions, concentration, rests, optional XP), and a
